@@ -4,7 +4,7 @@ import { getCollections } from "./mongo.js";
 const app = express();
 app.use(express.json());
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 3001);
 const VALIDATION_MODE = (process.env.VALIDATION_MODE || "off").toLowerCase();
 
 /**

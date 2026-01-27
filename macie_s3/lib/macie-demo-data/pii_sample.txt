@@ -1,0 +1,6 @@
+Customer record
+Name: John Smith
+Email: john.smith@example.com
+Phone: (415) 555-1234
+SSN: 123-45-6789
+Credit Card: 4111 1111 1111 1111

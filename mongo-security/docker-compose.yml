@@ -30,38 +30,35 @@ services:
       timeout: 3s
       retries: 20
 
-  app:
+  app-insecure:
     build:
       context: ./app
     container_name: mongo-demo-app
-    profiles: ["insecure", "secure"]
+    profiles: ["insecure"]
     depends_on:
       mongo-insecure:
         condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: "mongodb://mongo-insecure:27017/appdb"
+      VALIDATION_MODE: "off"
+    command: ["node", "src/server.js"]
+
+  app-secure:
+    build:
+      context: ./app
+    container_name: mongo-demo-app-secure
+    profiles: ["secure"]
+    depends_on:
       mongo-secure:
         condition: service_healthy
     ports:
-      - "3000:3000"
-    environment:
-      PORT: "3000"
-    # MONGO_URL + VALIDATION_MODE are set per-profile with overrides below
-    command: ["node", "src/server.js"]
-
-  app-insecure:
-    extends:
-      service: app
-    profiles: ["insecure"]
-    environment:
-      PORT: "3000"
-      MONGO_URL: "mongodb://mongo-insecure:27017"
-      VALIDATION_MODE: "off"
-
-  app-secure:
-    extends:
-      service: app
-    profiles: ["secure"]
+      - "3001:3000"
     environment:
       PORT: "3000"
       # Least-privileged user created by init script
       MONGO_URL: "mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb"
       VALIDATION_MODE: "on"
+    command: ["node", "src/server.js"]

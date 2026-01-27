@@ -6,12 +6,6 @@ This repo gives you a progressive, hands-on sequence that demonstrates:
 2) Secure MongoDB (auth + RBAC) + app input validation to block operator injection
 3) Scripted seed + scripted attacker step
 
-## Prereqs
-
-- Docker Desktop
-- Node.js is NOT required locally (everything runs in containers)
-- On Windows/WSL, run commands from a shell with Docker available
-
 ## Repo layout
 
 - `docker-compose.yml` : brings up MongoDB + the demo app in either **insecure** or **secure** mode (profiles)
@@ -53,7 +47,7 @@ bash scripts/attacker.sh
 View logs:
 
 ```bash
-docker compose --profile insecure logs -f app
+docker compose --profile insecure logs -f app-insecure
 ```
 
 Stop:
@@ -101,20 +95,136 @@ docker compose --profile secure down -v
 
 ---
 
-## Notes / Teaching beats
+## Understanding Secure vs Insecure Mode
 
-- Demo 1 shows how a JSON-based query can be abused with operators like `$ne`.
-- Demo 2 fixes two things:
-  - DB: require auth + create a least-privileged `app_user` (RBAC)
-  - App: reject operator keys (`$...`) and dotted paths plus enforce string types
+### Insecure Mode: What's Vulnerable
+
+**Database Layer:**
+
+- MongoDB runs with **no authentication** — anyone who can reach port 27017 can read/write any database
+- No user accounts, no passwords, no access control
+- Connection string: `mongodb://mongo-insecure:27017` (no credentials)
+
+**Application Layer:**
+
+- The `/login` endpoint directly passes user input to MongoDB's `findOne()`:
+
+  ```javascript
+  // VULNERABLE: req.body goes straight to the query
+  const user = await users.findOne({ username, password });
+  ```
+
+- No input validation — accepts any JSON structure
+
+**The Attack (NoSQL Injection):**
+
+```bash
+# Normal login
+curl -X POST http://localhost:3001/login \
+  -H "content-type: application/json" \
+  -d '{"username":"alice","password":"password123"}'
+# → {"ok":true} if credentials match
+
+# Injection attack using MongoDB operators
+curl -X POST http://localhost:3001/login \
+  -H "content-type: application/json" \
+  -d '{"username":{"$ne":null},"password":{"$ne":null}}'
+# → {"ok":true} — bypasses authentication!
+```
+
+The `$ne` (not equal) operator makes the query: *"find a user where username is not null AND password is not null"* — which matches ANY user in the database.
 
 ---
 
-## Environment variables
+### Secure Mode: Defense in Depth
+
+**Database Layer (Authentication + RBAC):**
+
+- MongoDB runs with `--auth` flag — authentication required
+- **Admin user** created with root privileges (for DB management only)
+- **app_user** created with least-privilege access:
+
+  ```javascript
+  // From mongo/init/01-rbac.js
+  db.createUser({
+    user: "app_user",
+    pwd: "ChangeMe_AppUser_LongRandom",
+    roles: [{ role: "readWrite", db: "appdb" }]  // Only appdb, nothing else
+  });
+  ```
+  
+- The app connects as `app_user` — even if compromised, attacker can't access other databases or admin functions
+
+**Application Layer (Input Validation):**
+- Rejects any input containing MongoDB operators (`$ne`, `$gt`, `$regex`, etc.):
+  ```javascript
+  function containsMongoOperators(value) {
+    if (!value || typeof value !== "object") return false;
+    for (const key of Object.keys(value)) {
+      if (key.startsWith("$") || key.includes(".")) return true;  // Block operators & dot notation
+      if (containsMongoOperators(value[key])) return true;        // Recursive check
+    }
+    return false;
+  }
+  ```
+- Enforces string types for username and password:
+  ```javascript
+  if (typeof username !== "string" || typeof password !== "string") {
+    return res.status(400).json({ error: "Invalid input" });
+  }
+  ```
+
+**Attack Result in Secure Mode:**
+```bash
+# Same injection attempt
+curl -X POST http://localhost:3001/login \
+  -H "content-type: application/json" \
+  -d '{"username":{"$ne":null},"password":{"$ne":null}}'
+# → HTTP 400: {"error":"Invalid input"} — blocked!
+```
+
+---
+
+## Security Layers Summary
+
+| Layer | Insecure Mode | Secure Mode |
+|-------|--------------|-------------|
+| **DB Authentication** | None | Required (`--auth`) |
+| **DB Authorization** | N/A | RBAC (least-privilege `app_user`) |
+| **Input Validation** | None | Blocks `$` operators, enforces types |
+| **Attack Result** | ✅ Injection succeeds | ❌ Blocked at app layer |
+
+---
+
+## Notes / Teaching Beats
+
+- **Demo 1** shows how a JSON-based query can be abused with operators like `$ne`, `$gt`, `$regex`
+- **Demo 2** fixes with defense in depth:
+  - **DB layer**: Require auth + create a least-privileged `app_user` (RBAC)
+  - **App layer**: Reject operator keys (`$...`) and dotted paths, enforce string types
+- Real-world applications should also use:
+  - Parameterized queries or ODM/ORM with built-in sanitization
+  - Rate limiting to prevent brute-force attacks
+  - Password hashing (never store plaintext passwords!)
+  - TLS/SSL for MongoDB connections
+
+---
+
+## Environment Variables
 
 The compose file sets:
-- Insecure: `MONGO_URL=mongodb://mongo-insecure:27017`
-- Secure:   `MONGO_URL=mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb`
+- **Insecure**: `MONGO_URL=mongodb://mongo-insecure:27017/appdb`
+- **Secure**: `MONGO_URL=mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb`
 
 The app also reads:
-- `VALIDATION_MODE=off|on`
+- `VALIDATION_MODE=off` (insecure) or `VALIDATION_MODE=on` (secure)
+
+---
+
+## Port Configuration
+
+The app runs on port **3001** by default (mapped from container port 3000). Update `BASE_URL` in scripts if needed:
+
+```bash
+BASE_URL=http://localhost:3001 bash scripts/attacker.sh
+```
