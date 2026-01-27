@@ -29,7 +29,18 @@ SSN: 123-45-6789
 Credit Card: 4111 1111 1111 1111
 EOF
 
+cat > "${DATA_DIR}/aws_credentials.txt" <<'EOF'
+# Leaked AWS credentials (demo only - these are example keys)
+[default]
+aws_access_key_id = AKIAIOSFODNN7EXAMPLE
+aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+
+[production]
+aws_access_key_id = AKIAI44QH8DHBEXAMPLE
+aws_secret_access_key = je7MtGbClwBF/2Zp9Utk/h3yCo8nvbEXAMPLEKEY
+EOF
+
 echo "Uploading sample files to s3://${BUCKET_NAME}/${S3_PREFIX}"
-aws s3 cp "${DATA_DIR}/" "s3://${BUCKET_NAME}/${S3_PREFIX}" --recursive --region "${AWS_REGION}"
+aws s3 sync "${DATA_DIR}/" "s3://${BUCKET_NAME}/${S3_PREFIX}" --region "${AWS_REGION}"
 
 echo "Upload complete."
