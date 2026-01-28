@@ -132,3 +132,25 @@ services:
     volumes:
       - ./certs:/certs:ro
     command: ["node", "src/server-encrypted.js"]
+
+  # ═══════════════════════════════════════════════════════════════
+  # CSFLE DEMO PROFILE - MongoDB native Client-Side Field Level Encryption
+  # ═══════════════════════════════════════════════════════════════
+  
+  app-csfle:
+    build:
+      context: ./app
+    container_name: mongo-demo-app-csfle
+    profiles: ["csfle"]
+    depends_on:
+      mongo-secure:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: "mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb"
+      # Local master key for CSFLE (base64 encoded 96 bytes)
+      # In production, use AWS KMS, Azure Key Vault, or GCP KMS
+      LOCAL_MASTER_KEY: "dGhpcyBpcyBhIGRlbW8gbWFzdGVyIGtleSBmb3IgY3NmbGUgZGVtbyBwdXJwb3NlcyBvbmx5IGRvIG5vdCB1c2UgaW4gcHJvZHVjdGlvbg=="
+    command: ["node", "src/server-csfle.js"]

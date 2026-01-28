@@ -4,18 +4,20 @@ This repo gives you a progressive, hands-on sequence that demonstrates:
 
 1) Insecure MongoDB (no auth) + vulnerable login endpoint (NoSQL injection)
 2) Secure MongoDB (auth + RBAC) + app input validation to block operator injection
-3) **Field-Level Encryption** for sensitive data (SSN, credit cards, emails)
-4) **TLS/SSL encryption** for data in transit
-5) Scripted seed + scripted attacker step
+3) **Field-Level Encryption** (manual AES-256) for sensitive data
+4) **MongoDB CSFLE** (Client-Side Field Level Encryption) - native automatic encryption
+5) **TLS/SSL encryption** for data in transit
+6) Scripted seed + scripted attacker step
 
 ## Repo layout
 
-- `docker-compose.yml` : brings up MongoDB + the demo app in either **insecure**, **secure**, **encrypted**, or **tls** mode (profiles)
+- `docker-compose.yml` : brings up MongoDB + the demo app in **insecure**, **secure**, **encrypted**, **csfle**, or **tls** mode
 - `app/` : Node/Express app (supports validation on/off, field-level encryption)
 - `mongo/init/` : Mongo init scripts (RBAC user creation for secure mode)
 - `scripts/seed.sh` : seeds demo users into MongoDB
 - `scripts/attacker.sh` : performs a NoSQL injection attempt against `/login`
-- `scripts/demo-encryption.sh` : demonstrates field-level encryption
+- `scripts/demo-encryption.sh` : demonstrates manual field-level encryption
+- `scripts/demo-csfle.sh` : demonstrates MongoDB native CSFLE
 - `scripts/demo-tls.sh` : generates TLS certificates and shows TLS usage
 
 ---
@@ -156,7 +158,72 @@ docker compose --profile secure --profile encrypted down -v
 
 ---
 
-## Demo 4: TLS/SSL Encryption (Data in Transit)
+## Demo 4: MongoDB CSFLE (Native Client-Side Field Level Encryption)
+
+CSFLE is MongoDB's **native automatic encryption** - the driver handles encryption/decryption transparently!
+
+### Why CSFLE over manual encryption?
+
+| Feature | Manual (Demo 3) | CSFLE (Demo 4) |
+|---------|-----------------|----------------|
+| Encryption | Manual calls | Automatic |
+| Query encrypted fields | ❌ No | ✓ Yes (Deterministic) |
+| Forget to encrypt? | Possible | Impossible (schema-based) |
+| MongoDB native | No | Yes |
+
+### Start the CSFLE stack:
+
+```bash
+docker compose --profile secure --profile csfle up -d
+```
+
+### Run the CSFLE demo:
+
+```bash
+bash scripts/demo-csfle.sh
+```
+
+### Manual testing:
+
+```bash
+# Create user - fields auto-encrypted by MongoDB driver!
+curl -X POST http://localhost:3001/users/csfle \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "csfle_demo",
+    "password": "Secret123",
+    "email": "csfle@example.com",
+    "ssn": "555-66-7777",
+    "creditCard": "4000-1234-5678-9010"
+  }'
+
+# View RAW data (encrypted Binary blobs)
+curl http://localhost:3001/users/csfle/raw/csfle_demo | jq .
+
+# View decrypted (automatic via CSFLE client)
+curl http://localhost:3001/users/csfle/csfle_demo | jq .
+
+# Query by encrypted SSN field! (only Deterministic encryption supports this)
+curl http://localhost:3001/users/csfle/by-ssn/555-66-7777 | jq .
+
+# Compare encryption methods
+curl http://localhost:3001/demo/compare-methods | jq .
+```
+
+### CSFLE Encryption Algorithms:
+
+- **Deterministic**: Same plaintext → same ciphertext (allows equality queries)
+- **Random**: Same plaintext → different ciphertext each time (more secure, no queries)
+
+Stop:
+
+```bash
+docker compose --profile secure --profile csfle down -v
+```
+
+---
+
+## Demo 5: TLS/SSL Encryption (Data in Transit)
 
 This demo shows how to secure MongoDB connections with TLS certificates.
 
@@ -348,14 +415,16 @@ curl -X POST http://localhost:3001/login \
 
 ## Security Layers Summary
 
-| Layer | Insecure | Secure | Encrypted | TLS |
-|-------|----------|--------|-----------|-----|
-| **DB Authentication** | ❌ None | ✓ Required | ✓ Required | ✓ Required |
-| **DB Authorization** | ❌ N/A | ✓ RBAC | ✓ RBAC | ✓ RBAC |
-| **Input Validation** | ❌ None | ✓ Blocks operators | ✓ Blocks operators | ✓ Blocks operators |
-| **Field Encryption** | ❌ None | ❌ None | ✓ AES-256-GCM | ✓ AES-256-GCM |
-| **Transport Encryption** | ❌ None | ❌ None | ❌ None | ✓ TLS 1.3 |
-| **Password Storage** | ❌ Plaintext | ❌ Plaintext | ✓ Hashed (scrypt) | ✓ Hashed (scrypt) |
+| Layer | Insecure | Secure | Encrypted | CSFLE | TLS |
+|-------|----------|--------|-----------|-------|-----|
+| **DB Authentication** | ❌ None | ✓ Required | ✓ Required | ✓ Required | ✓ Required |
+| **DB Authorization** | ❌ N/A | ✓ RBAC | ✓ RBAC | ✓ RBAC | ✓ RBAC |
+| **Input Validation** | ❌ None | ✓ Blocks operators | ✓ Blocks operators | ✓ Blocks operators | ✓ Blocks operators |
+| **Field Encryption** | ❌ None | ❌ None | ✓ AES-256-GCM | ✓ MongoDB native | ✓ AES-256-GCM |
+| **Auto Encrypt/Decrypt** | ❌ | ❌ | ❌ Manual | ✓ Automatic | ❌ Manual |
+| **Query Encrypted Fields** | ❌ | ❌ | ❌ | ✓ Deterministic | ❌ |
+| **Transport Encryption** | ❌ None | ❌ None | ❌ None | ❌ None | ✓ TLS 1.3 |
+| **Password Storage** | ❌ Plaintext | ❌ Plaintext | ✓ Hashed | N/A | ✓ Hashed |
 
 ---
 
@@ -369,8 +438,9 @@ curl -X POST http://localhost:3001/login \
   - Parameterized queries or ODM/ORM with built-in sanitization
   - Rate limiting to prevent brute-force attacks
   - Password hashing (never store plaintext passwords!) — **Demo 3 shows this!**
-  - TLS/SSL for MongoDB connections — **Demo 4 shows this!**
-  - Field-level encryption for PII — **Demo 3 shows this!**
+  - MongoDB CSFLE for automatic field encryption — **Demo 4 shows this!**
+  - TLS/SSL for MongoDB connections — **Demo 5 shows this!**
+  - Field-level encryption for PII — **Demo 3 & 4 show this!**
   - A proper Key Management Service (AWS KMS, Azure Key Vault, HashiCorp Vault)
 
 ---
@@ -381,11 +451,13 @@ The compose file sets:
 - **Insecure**: `MONGO_URL=mongodb://mongo-insecure:27017/appdb`
 - **Secure**: `MONGO_URL=mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb`
 - **Encrypted**: Same as secure + `ENCRYPTION_SECRET=demo-encryption-key-change-in-production`
+- **CSFLE**: Same as secure + `LOCAL_MASTER_KEY` (base64 encoded 96-byte key)
 - **TLS**: Secure URL + `tls=true&tlsCAFile=/certs/ca.pem`
 
 The app also reads:
 - `VALIDATION_MODE=off` (insecure) or `VALIDATION_MODE=on` (secure/encrypted/tls)
-- `ENCRYPTION_SECRET` — Key for field-level encryption (use KMS in production!)
+- `ENCRYPTION_SECRET` — Key for manual field-level encryption (use KMS in production!)
+- `LOCAL_MASTER_KEY` — CSFLE master key (use real KMS in production!)
 
 ---
 
@@ -405,7 +477,8 @@ BASE_URL=http://localhost:3001 bash scripts/attacker.sh
 |---------|---------|---------------------|
 | `insecure` | `docker compose --profile insecure up -d` | No auth, NoSQL injection works |
 | `secure` | `docker compose --profile secure up -d` | Auth + RBAC + input validation |
-| `encrypted` | `docker compose --profile secure --profile encrypted up -d` | Field-level encryption |
+| `encrypted` | `docker compose --profile secure --profile encrypted up -d` | Manual field-level encryption (AES-256) |
+| `csfle` | `docker compose --profile secure --profile csfle up -d` | MongoDB native CSFLE (automatic encryption) |
 | `tls` | `docker compose --profile tls up -d` | TLS/SSL encryption in transit |
 
 **Full security demo progression:**
@@ -422,12 +495,17 @@ bash scripts/seed.sh secure
 bash scripts/attacker.sh          # Injection blocked!
 docker compose --profile secure down -v
 
-# 3. Add field-level encryption
+# 3. Add manual field-level encryption
 docker compose --profile secure --profile encrypted up -d
 bash scripts/demo-encryption.sh   # Shows encrypted storage
 docker compose --profile secure --profile encrypted down -v
 
-# 4. Add TLS (requires certs)
+# 4. MongoDB native CSFLE (recommended!)
+docker compose --profile secure --profile csfle up -d
+bash scripts/demo-csfle.sh        # Automatic encryption + queryable!
+docker compose --profile secure --profile csfle down -v
+
+# 5. Add TLS (requires certs)
 bash scripts/demo-tls.sh          # Generate certs first
 docker compose --profile tls up -d
 curl http://localhost:3001/health
