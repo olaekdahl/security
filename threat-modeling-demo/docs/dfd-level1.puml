@@ -1,0 +1,64 @@
+@startuml
+title DFD (Level 1) - Web App + API on AWS (React + Node)
+
+' Notes:
+' - This is a practical DFD-style view in PlantUML.
+' - Trust boundaries are shown as frames.
+' - Data stores are shown as database nodes.
+' - External entities are actors.
+' - Processes are components.
+
+skinparam shadowing false
+skinparam componentStyle rectangle
+
+' External Entities (Internet Trust Boundary)
+rectangle "Trust Boundary: Internet" as TB_INTERNET #line.dashed {
+  actor "User Browser\n(React SPA)" as USER
+  actor "Admin Browser\n(React SPA)" as ADMIN
+  actor "Third-Party IdP\n(OIDC)" as IDP
+  actor "Email Provider\n(SES/SendGrid)" as EMAIL
+}
+
+rectangle "Trust Boundary: AWS Account / VPC" as TB_AWS #line.dashed {
+  component "CloudFront\n(optional)" as CLOUDFRONT
+  component "WAF\n(optional)" as WAF
+  component "API Gateway / ALB" as EDGE
+  component "Node API\n(Express)" as API
+  component "Worker\n(Queue consumer)" as WORKER
+
+  database "RDS/Postgres\n(or DynamoDB)" as DB
+  database "S3 Bucket\n(uploads)" as S3
+  database "Redis/Cache\n(optional)" as CACHE
+  database "Secrets Manager\n(or SSM)" as SECRETS
+  component "CloudWatch Logs\n+ Metrics" as LOGS
+  component "CloudTrail" as CLOUDTRAIL
+  component "Queue\n(SQS)" as QUEUE
+}
+
+' Data flows
+USER --> CLOUDFRONT : HTTPS GET / (SPA assets)
+ADMIN --> CLOUDFRONT : HTTPS GET /admin (SPA assets)
+CLOUDFRONT --> WAF : Forward request
+WAF --> EDGE : Allow/Block
+
+USER --> EDGE : HTTPS API calls\n(GET /api/*, POST /api/*)
+ADMIN --> EDGE : HTTPS Admin API calls\n(/api/admin/*)
+
+EDGE --> API : HTTPS (internal)\nForwarded requests
+
+API --> IDP : OIDC code/token exchange\n(Authorization Code + PKCE)
+API --> SECRETS : Read signing keys,\nDB creds
+API --> DB : Read/Write data
+API --> S3 : Put/Get objects
+API --> CACHE : Read/Write cache
+API --> QUEUE : Enqueue async jobs
+WORKER --> QUEUE : Consume jobs
+WORKER --> S3 : Generate thumbnails\nor process files
+WORKER --> DB : Update job status
+
+API --> EMAIL : Send notifications
+API --> LOGS : App logs, metrics
+EDGE --> LOGS : Access logs
+CLOUDTRAIL --> LOGS : Audit logs
+
+@enduml

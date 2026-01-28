@@ -1,0 +1,71 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # MongoDB Database
+  # ═══════════════════════════════════════════════════════════════
+  mongo:
+    image: mongo:7
+    container_name: threat-modeling-mongo
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ThreatModel_SecurePassword_2024
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://admin:ThreatModel_SecurePassword_2024@localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ═══════════════════════════════════════════════════════════════
+  # Node.js Backend API
+  # ═══════════════════════════════════════════════════════════════
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: threat-modeling-api
+    depends_on:
+      mongo:
+        condition: service_healthy
+    ports:
+      - "7001:7001"
+    environment:
+      PORT: "7001"
+      NODE_ENV: "production"
+      MONGO_URL: "mongodb://admin:ThreatModel_SecurePassword_2024@mongo:27017/threat_modeling?authSource=admin"
+      JWT_SECRET: "change-this-in-production-use-strong-random-secret"
+      CORS_ORIGIN: "http://localhost:7000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ═══════════════════════════════════════════════════════════════
+  # React Frontend (Development)
+  # ═══════════════════════════════════════════════════════════════
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: threat-modeling-client
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "7000:3000"
+    environment:
+      # For browser requests, use localhost (the host machine's perspective)
+      REACT_APP_API_BASE_URL: "http://localhost:7001"
+      CHOKIDAR_USEPOLLING: "true"
+      # Fix WebSocket for hot reloading when port is remapped
+      WDS_SOCKET_PORT: "7000"
+    volumes:
+      - ./client/src:/app/src
+      - ./client/public:/app/public
+    stdin_open: true
+
+volumes:
+  mongo-data:

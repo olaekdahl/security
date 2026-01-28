@@ -1,0 +1,6 @@
+ThreatID,Title,DFD_Element_or_Flow,Asset,STRIDE,OWASP_2021,DREAD_Damage,DREAD_Reproducibility,DREAD_Exploitability,DREAD_AffectedUsers,DREAD_Discoverability,DREAD_Avg,Likelihood,Impact,RiskLevel,Mitigation,Owner,Status,Evidence_Link,Notes
+TM-001,Credential stuffing / account takeover,Browser->API POST /login,"Accounts,Sessions","S,D",A07 Identification and Authentication Failures,8,9,8,7,7,7.8,High,High,High,"Rate limit, MFA for risky logins, lockout, bot detection",TBD,Open,,
+TM-002,Broken object-level authorization (IDOR/BOLA),Browser->API GET /api/orders,"Orders,PII","E,I",A01 Broken Access Control,9,8,8,8,7,8.0,Medium,High,High,"Server-side object-level authz checks, deny-by-default",TBD,Open,,
+TM-003,Injection in API query,API->DB,"PII,Integrity","T,I",A03 Injection,9,7,7,8,6,7.4,Medium,High,High,"Parameterized queries/ORM, input validation, least-priv DB role",TBD,Open,,
+TM-004,S3 public access / overbroad IAM,API->S3,"Files,PII","I,E",A05 Security Misconfiguration; A02 Cryptographic Failures,10,9,7,9,8,8.6,Medium,High,High,"Block public access, least privilege IAM, encryption, short TTL presigned URLs",TBD,Open,,
+TM-005,Insufficient logging & monitoring,API/Edge logs,Auditability,R,A09 Security Logging and Monitoring Failures,6,6,5,6,6,5.8,Medium,Medium,Medium,"Structured logs, correlation IDs, CloudTrail, alerts",TBD,Open,,
