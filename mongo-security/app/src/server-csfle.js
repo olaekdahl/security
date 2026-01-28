@@ -96,7 +96,7 @@ app.post("/users/csfle", async (req, res) => {
     // Just insert normally - CSFLE encrypts automatically based on schema!
     const doc = {
       username,
-      password, // Note: In production, HASH this, don't encrypt it
+      password, // Note: In production, HASH this
       email: email || null,
       ssn: ssn || null,
       creditCard: creditCard || null,

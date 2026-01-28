@@ -105,10 +105,10 @@ docker compose --profile secure down -v
 
 This demo shows application-level encryption of sensitive fields like SSN, credit cards, and emails.
 
-Start the encrypted stack (uses secure MongoDB + encryption):
+Start the encrypted stack:
 
 ```bash
-docker compose --profile secure --profile encrypted up -d
+docker compose --profile encrypted up -d
 ```
 
 Run the encryption demo script:
@@ -153,7 +153,7 @@ curl -X POST http://localhost:3001/login/secure \
 Stop:
 
 ```bash
-docker compose --profile secure --profile encrypted down -v
+docker compose --profile encrypted down -v
 ```
 
 ---
@@ -174,7 +174,7 @@ CSFLE is MongoDB's **native automatic encryption** - the driver handles encrypti
 ### Start the CSFLE stack:
 
 ```bash
-docker compose --profile secure --profile csfle up -d
+docker compose --profile csfle up -d
 ```
 
 ### Run the CSFLE demo:
@@ -218,7 +218,7 @@ curl http://localhost:3001/demo/compare-methods | jq .
 Stop:
 
 ```bash
-docker compose --profile secure --profile csfle down -v
+docker compose --profile csfle down -v
 ```
 
 ---
@@ -477,9 +477,11 @@ BASE_URL=http://localhost:3001 bash scripts/attacker.sh
 |---------|---------|---------------------|
 | `insecure` | `docker compose --profile insecure up -d` | No auth, NoSQL injection works |
 | `secure` | `docker compose --profile secure up -d` | Auth + RBAC + input validation |
-| `encrypted` | `docker compose --profile secure --profile encrypted up -d` | Manual field-level encryption (AES-256) |
-| `csfle` | `docker compose --profile secure --profile csfle up -d` | MongoDB native CSFLE (automatic encryption) |
+| `encrypted` | `docker compose --profile encrypted up -d` | Manual field-level encryption (AES-256) |
+| `csfle` | `docker compose --profile csfle up -d` | MongoDB native CSFLE (automatic encryption) |
 | `tls` | `docker compose --profile tls up -d` | TLS/SSL encryption in transit |
+
+> **Note:** Each profile is self-contained. The `encrypted`, `csfle`, and `tls` profiles automatically include the secure MongoDB instance.
 
 **Full security demo progression:**
 ```bash
@@ -496,14 +498,14 @@ bash scripts/attacker.sh          # Injection blocked!
 docker compose --profile secure down -v
 
 # 3. Add manual field-level encryption
-docker compose --profile secure --profile encrypted up -d
+docker compose --profile encrypted up -d
 bash scripts/demo-encryption.sh   # Shows encrypted storage
-docker compose --profile secure --profile encrypted down -v
+docker compose --profile encrypted down -v
 
 # 4. MongoDB native CSFLE (recommended!)
-docker compose --profile secure --profile csfle up -d
+docker compose --profile csfle up -d
 bash scripts/demo-csfle.sh        # Automatic encryption + queryable!
-docker compose --profile secure --profile csfle down -v
+docker compose --profile csfle down -v
 
 # 5. Add TLS (requires certs)
 bash scripts/demo-tls.sh          # Generate certs first

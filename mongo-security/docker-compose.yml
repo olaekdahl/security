@@ -15,7 +15,7 @@ services:
   mongo-secure:
     image: mongo:7
     container_name: mongo-secure
-    profiles: ["secure"]
+    profiles: ["secure", "encrypted", "csfle"]
     ports:
       - "27017:27017"
     environment:
@@ -104,14 +104,16 @@ services:
       - --tlsMode=requireTLS
       - --tlsCertificateKeyFile=/certs/server.pem
       - --tlsCAFile=/certs/ca.pem
+      - --tlsAllowConnectionsWithoutCertificates
     volumes:
       - ./mongo/init:/docker-entrypoint-initdb.d:ro
       - ./certs:/certs:ro
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--tls", "--tlsCAFile", "/certs/ca.pem", "mongodb://admin:ChangeMe_LongRandom@localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 })"]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+      test: ["CMD", "mongosh", "--quiet", "--tls", "--tlsCAFile", "/certs/ca.pem", "--tlsAllowInvalidCertificates", "mongodb://admin:ChangeMe_LongRandom@localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 30s
 
   app-tls:
     build:
