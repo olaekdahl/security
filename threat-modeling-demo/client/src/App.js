@@ -524,6 +524,120 @@ function DreadPage() {
 }
 
 // PASTA Page
+// Helper function to render PASTA findings as formatted tables
+function renderFindings(findings) {
+  if (!findings) return null;
+  
+  // Helper to format a value for display
+  const formatValue = (value) => {
+    if (value === null || value === undefined) return '-';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (Array.isArray(value)) {
+      if (value.length === 0) return '-';
+      if (typeof value[0] === 'string') return value.join(', ');
+      // Array of objects - render as mini list
+      return (
+        <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+          {value.map((item, i) => (
+            <li key={i} style={{ fontSize: '0.8rem' }}>
+              {typeof item === 'object' ? Object.values(item).filter(v => typeof v === 'string').join(' - ') || JSON.stringify(item) : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (typeof value === 'object') {
+      // Object - render key-value pairs inline or as sub-list
+      const entries = Object.entries(value);
+      if (entries.length <= 3 && entries.every(([k, v]) => typeof v === 'string' || typeof v === 'number')) {
+        return entries.map(([k, v]) => `${k}: ${v}`).join(', ');
+      }
+      return (
+        <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+          {entries.map(([k, v]) => (
+            <li key={k} style={{ fontSize: '0.8rem' }}>
+              <strong>{k}:</strong> {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    return String(value);
+  };
+  
+  // Handle array of simple strings
+  if (Array.isArray(findings) && typeof findings[0] === 'string') {
+    return (
+      <ul style={{ paddingLeft: '1.25rem', margin: 0 }}>
+        {findings.map((item, i) => (
+          <li key={i} style={{ fontSize: '0.875rem', marginBottom: '0.25rem' }}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  
+  // Handle array of objects
+  if (Array.isArray(findings) && typeof findings[0] === 'object') {
+    const keys = Object.keys(findings[0]);
+    return (
+      <div className="table-container" style={{ maxHeight: '300px', overflow: 'auto' }}>
+        <table style={{ fontSize: '0.8rem' }}>
+          <thead>
+            <tr>
+              {keys.map(key => (
+                <th key={key} style={{ textTransform: 'capitalize', padding: '0.5rem' }}>
+                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {findings.map((row, i) => (
+              <tr key={i}>
+                {keys.map(key => (
+                  <td key={key} style={{ padding: '0.5rem', verticalAlign: 'top' }}>
+                    {formatValue(row[key])}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  
+  // Handle single object with key-value pairs
+  if (typeof findings === 'object' && !Array.isArray(findings)) {
+    return (
+      <div className="table-container">
+        <table style={{ fontSize: '0.8rem' }}>
+          <tbody>
+            {Object.entries(findings).map(([key, value]) => (
+              <tr key={key}>
+                <td style={{ padding: '0.5rem', fontWeight: '500', textTransform: 'capitalize', verticalAlign: 'top', width: '150px' }}>
+                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                </td>
+                <td style={{ padding: '0.5rem', verticalAlign: 'top' }}>
+                  {formatValue(value)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  
+  // Fallback to JSON
+  return (
+    <pre style={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: '200px' }}>
+      {JSON.stringify(findings, null, 2)}
+    </pre>
+  );
+}
+
 function PastaPage() {
   const [data, setData] = useState(null);
   const [activeStage, setActiveStage] = useState(1);
@@ -587,10 +701,8 @@ function PastaPage() {
 
             {currentStage.findings && (
               <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem' }}>
-                <h4 style={{ fontSize: '0.875rem', marginBottom: '0.5rem' }}>Example Findings</h4>
-                <pre style={{ fontSize: '0.75rem', overflow: 'auto', maxHeight: '200px' }}>
-                  {JSON.stringify(currentStage.findings, null, 2)}
-                </pre>
+                <h4 style={{ fontSize: '0.875rem', marginBottom: '0.75rem' }}>Example Findings</h4>
+                {renderFindings(currentStage.findings)}
               </div>
             )}
           </div>
