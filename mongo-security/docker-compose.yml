@@ -62,3 +62,73 @@ services:
       MONGO_URL: "mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb"
       VALIDATION_MODE: "on"
     command: ["node", "src/server.js"]
+
+  # ═══════════════════════════════════════════════════════════════
+  # ENCRYPTION DEMO PROFILE
+  # ═══════════════════════════════════════════════════════════════
+  
+  app-encrypted:
+    build:
+      context: ./app
+    container_name: mongo-demo-app-encrypted
+    profiles: ["encrypted"]
+    depends_on:
+      mongo-secure:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: "mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb"
+      # In production, use a KMS (AWS KMS, Azure Key Vault, HashiCorp Vault)
+      ENCRYPTION_SECRET: "demo-encryption-key-change-in-production"
+    command: ["node", "src/server-encrypted.js"]
+
+  # ═══════════════════════════════════════════════════════════════
+  # TLS DEMO PROFILE - MongoDB with TLS/SSL encryption in transit
+  # ═══════════════════════════════════════════════════════════════
+  
+  mongo-tls:
+    image: mongo:7
+    container_name: mongo-tls
+    profiles: ["tls"]
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: ChangeMe_LongRandom
+    command:
+      - mongod
+      - --auth
+      - --bind_ip_all
+      - --tlsMode=requireTLS
+      - --tlsCertificateKeyFile=/certs/server.pem
+      - --tlsCAFile=/certs/ca.pem
+    volumes:
+      - ./mongo/init:/docker-entrypoint-initdb.d:ro
+      - ./certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--tls", "--tlsCAFile", "/certs/ca.pem", "mongodb://admin:ChangeMe_LongRandom@localhost:27017/admin", "--eval", "db.runCommand({ ping: 1 })"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app-tls:
+    build:
+      context: ./app
+    container_name: mongo-demo-app-tls
+    profiles: ["tls"]
+    depends_on:
+      mongo-tls:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: "mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-tls:27017/appdb?authSource=appdb&tls=true&tlsCAFile=/certs/ca.pem&tlsAllowInvalidHostnames=true"
+      VALIDATION_MODE: "on"
+      ENCRYPTION_SECRET: "demo-encryption-key-change-in-production"
+      NODE_EXTRA_CA_CERTS: "/certs/ca.pem"
+    volumes:
+      - ./certs:/certs:ro
+    command: ["node", "src/server-encrypted.js"]

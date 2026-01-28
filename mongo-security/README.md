@@ -4,15 +4,19 @@ This repo gives you a progressive, hands-on sequence that demonstrates:
 
 1) Insecure MongoDB (no auth) + vulnerable login endpoint (NoSQL injection)
 2) Secure MongoDB (auth + RBAC) + app input validation to block operator injection
-3) Scripted seed + scripted attacker step
+3) **Field-Level Encryption** for sensitive data (SSN, credit cards, emails)
+4) **TLS/SSL encryption** for data in transit
+5) Scripted seed + scripted attacker step
 
 ## Repo layout
 
-- `docker-compose.yml` : brings up MongoDB + the demo app in either **insecure** or **secure** mode (profiles)
-- `app/` : Node/Express app (supports validation on/off)
+- `docker-compose.yml` : brings up MongoDB + the demo app in either **insecure**, **secure**, **encrypted**, or **tls** mode (profiles)
+- `app/` : Node/Express app (supports validation on/off, field-level encryption)
 - `mongo/init/` : Mongo init scripts (RBAC user creation for secure mode)
 - `scripts/seed.sh` : seeds demo users into MongoDB
 - `scripts/attacker.sh` : performs a NoSQL injection attempt against `/login`
+- `scripts/demo-encryption.sh` : demonstrates field-level encryption
+- `scripts/demo-tls.sh` : generates TLS certificates and shows TLS usage
 
 ---
 
@@ -92,6 +96,163 @@ Stop:
 ```bash
 docker compose --profile secure down -v
 ```
+
+---
+
+## Demo 3: Field-Level Encryption (Protecting Sensitive Data)
+
+This demo shows application-level encryption of sensitive fields like SSN, credit cards, and emails.
+
+Start the encrypted stack (uses secure MongoDB + encryption):
+
+```bash
+docker compose --profile secure --profile encrypted up -d
+```
+
+Run the encryption demo script:
+
+```bash
+bash scripts/demo-encryption.sh
+```
+
+**What the demo shows:**
+
+1. **Create user with sensitive data** — SSN, credit card, email are encrypted before storage
+2. **View raw MongoDB data** — See the encrypted blobs stored in the database
+3. **View decrypted data** — Application decrypts fields using the encryption key
+4. **Password hashing** — Passwords are hashed (one-way), not encrypted
+
+**Manual testing:**
+
+```bash
+# Create a user with sensitive data
+curl -X POST http://localhost:3001/users/encrypted \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "test_user",
+    "password": "MyPassword123",
+    "email": "test@example.com",
+    "ssn": "123-45-6789",
+    "creditCard": "4111-1111-1111-1111"
+  }'
+
+# View RAW data in MongoDB (encrypted)
+curl http://localhost:3001/users/raw/test_user | jq .
+
+# View DECRYPTED data (application has the key)
+curl http://localhost:3001/users/encrypted/test_user | jq .
+
+# Test secure login
+curl -X POST http://localhost:3001/login/secure \
+  -H "Content-Type: application/json" \
+  -d '{"username": "test_user", "password": "MyPassword123"}'
+```
+
+Stop:
+
+```bash
+docker compose --profile secure --profile encrypted down -v
+```
+
+---
+
+## Demo 4: TLS/SSL Encryption (Data in Transit)
+
+This demo shows how to secure MongoDB connections with TLS certificates.
+
+### Step 1: Generate TLS Certificates
+
+```bash
+bash scripts/demo-tls.sh
+```
+
+This creates:
+- `certs/ca.pem` — Certificate Authority
+- `certs/server.pem` — MongoDB server certificate
+- `certs/client.pem` — Client certificate (for mTLS)
+
+### Step 2: Start MongoDB with TLS
+
+```bash
+docker compose --profile tls up -d
+```
+
+### Step 3: Connect with TLS
+
+```bash
+# Connect to MongoDB with TLS
+docker exec -it mongo-tls mongosh \
+  "mongodb://admin:ChangeMe_LongRandom@localhost:27017/admin" \
+  --tls --tlsCAFile /certs/ca.pem
+
+# Test the app (automatically uses TLS)
+curl http://localhost:3001/health
+```
+
+### Step 4: Verify TLS is Required
+
+```bash
+# This should FAIL (no TLS)
+docker exec -it mongo-tls mongosh \
+  "mongodb://admin:ChangeMe_LongRandom@localhost:27017/admin" \
+  --eval "db.runCommand({ping:1})" 2>&1 || echo "✓ Connection without TLS rejected!"
+```
+
+Stop:
+
+```bash
+docker compose --profile tls down -v
+```
+
+---
+
+## Understanding Encryption Layers
+
+### Field-Level Encryption (Data at Rest)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Application Layer                                          │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  User Input                                             ││
+│  │  { ssn: "123-45-6789", email: "user@example.com" }      ││
+│  └─────────────────────────────────────────────────────────┘│
+│                           │                                 │
+│                    ┌──────▼──────┐                          │
+│                    │  ENCRYPT    │ ◄── AES-256-GCM          │
+│                    └──────┬──────┘                          │
+│                           │                                 │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │  Encrypted Document (stored in MongoDB)                 ││
+│  │  { ssn: "Abc123...==", email: "Xyz789...==" }           ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Benefits:**
+- Even if database is breached, sensitive data is unreadable
+- Encryption keys can be managed separately (KMS)
+- Granular control over which fields are encrypted
+
+### TLS Encryption (Data in Transit)
+
+```
+┌──────────┐                           ┌──────────┐
+│  Client  │ ═══════TLS══════════════> │  MongoDB │
+│  (App)   │ <═══════ENCRYPTED════════ │  Server  │
+└──────────┘                           └──────────┘
+     │                                       │
+     │  • Credentials encrypted              │
+     │  • Query data encrypted               │
+     │  • Results encrypted                  │
+     │  • Protected from MITM attacks        │
+     └───────────────────────────────────────┘
+```
+
+**Benefits:**
+- Prevents eavesdropping on network traffic
+- Verifies server identity (prevents impersonation)
+- Required for compliance (PCI-DSS, HIPAA, SOC2)
 
 ---
 
@@ -187,12 +348,14 @@ curl -X POST http://localhost:3001/login \
 
 ## Security Layers Summary
 
-| Layer | Insecure Mode | Secure Mode |
-|-------|--------------|-------------|
-| **DB Authentication** | None | Required (`--auth`) |
-| **DB Authorization** | N/A | RBAC (least-privilege `app_user`) |
-| **Input Validation** | None | Blocks `$` operators, enforces types |
-| **Attack Result** | ✅ Injection succeeds | ❌ Blocked at app layer |
+| Layer | Insecure | Secure | Encrypted | TLS |
+|-------|----------|--------|-----------|-----|
+| **DB Authentication** | ❌ None | ✓ Required | ✓ Required | ✓ Required |
+| **DB Authorization** | ❌ N/A | ✓ RBAC | ✓ RBAC | ✓ RBAC |
+| **Input Validation** | ❌ None | ✓ Blocks operators | ✓ Blocks operators | ✓ Blocks operators |
+| **Field Encryption** | ❌ None | ❌ None | ✓ AES-256-GCM | ✓ AES-256-GCM |
+| **Transport Encryption** | ❌ None | ❌ None | ❌ None | ✓ TLS 1.3 |
+| **Password Storage** | ❌ Plaintext | ❌ Plaintext | ✓ Hashed (scrypt) | ✓ Hashed (scrypt) |
 
 ---
 
@@ -205,8 +368,10 @@ curl -X POST http://localhost:3001/login \
 - Real-world applications should also use:
   - Parameterized queries or ODM/ORM with built-in sanitization
   - Rate limiting to prevent brute-force attacks
-  - Password hashing (never store plaintext passwords!)
-  - TLS/SSL for MongoDB connections
+  - Password hashing (never store plaintext passwords!) — **Demo 3 shows this!**
+  - TLS/SSL for MongoDB connections — **Demo 4 shows this!**
+  - Field-level encryption for PII — **Demo 3 shows this!**
+  - A proper Key Management Service (AWS KMS, Azure Key Vault, HashiCorp Vault)
 
 ---
 
@@ -215,9 +380,12 @@ curl -X POST http://localhost:3001/login \
 The compose file sets:
 - **Insecure**: `MONGO_URL=mongodb://mongo-insecure:27017/appdb`
 - **Secure**: `MONGO_URL=mongodb://app_user:ChangeMe_AppUser_LongRandom@mongo-secure:27017/appdb?authSource=appdb`
+- **Encrypted**: Same as secure + `ENCRYPTION_SECRET=demo-encryption-key-change-in-production`
+- **TLS**: Secure URL + `tls=true&tlsCAFile=/certs/ca.pem`
 
 The app also reads:
-- `VALIDATION_MODE=off` (insecure) or `VALIDATION_MODE=on` (secure)
+- `VALIDATION_MODE=off` (insecure) or `VALIDATION_MODE=on` (secure/encrypted/tls)
+- `ENCRYPTION_SECRET` — Key for field-level encryption (use KMS in production!)
 
 ---
 
@@ -227,4 +395,41 @@ The app runs on port **3001** by default (mapped from container port 3000). Upda
 
 ```bash
 BASE_URL=http://localhost:3001 bash scripts/attacker.sh
+```
+
+---
+
+## Quick Reference: All Profiles
+
+| Profile | Command | What it demonstrates |
+|---------|---------|---------------------|
+| `insecure` | `docker compose --profile insecure up -d` | No auth, NoSQL injection works |
+| `secure` | `docker compose --profile secure up -d` | Auth + RBAC + input validation |
+| `encrypted` | `docker compose --profile secure --profile encrypted up -d` | Field-level encryption |
+| `tls` | `docker compose --profile tls up -d` | TLS/SSL encryption in transit |
+
+**Full security demo progression:**
+```bash
+# 1. Show the vulnerability
+docker compose --profile insecure up -d
+bash scripts/seed.sh insecure
+bash scripts/attacker.sh          # Injection succeeds!
+docker compose --profile insecure down -v
+
+# 2. Fix with auth + validation
+docker compose --profile secure up -d
+bash scripts/seed.sh secure
+bash scripts/attacker.sh          # Injection blocked!
+docker compose --profile secure down -v
+
+# 3. Add field-level encryption
+docker compose --profile secure --profile encrypted up -d
+bash scripts/demo-encryption.sh   # Shows encrypted storage
+docker compose --profile secure --profile encrypted down -v
+
+# 4. Add TLS (requires certs)
+bash scripts/demo-tls.sh          # Generate certs first
+docker compose --profile tls up -d
+curl http://localhost:3001/health
+docker compose --profile tls down -v
 ```
