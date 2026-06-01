@@ -128,6 +128,92 @@ Once running, open your browser to: **http://localhost:8080**
 3. After successful login, visit `/protected` to see your user information
 4. Click logout or visit `/logout` to end the session
 
+## Understanding the `/protected` Output
+
+After signing in, the `/protected` page decodes your tokens and displays each
+claim alongside a plain-English explanation. The app receives an **ID token**
+(who the user is) and an **access token** (what the caller may do); both are
+issued by your Okta authorization server.
+
+### ID Token Claims
+
+The ID token proves the user's identity. Example claims:
+
+| Claim | Example value | Meaning |
+|-------|---------------|---------|
+| `sub` | `00uzixnqrj995Gp8m697` | Subject — unique, stable identifier for the user |
+| `name` | `Ola Ekdahl` | Full display name |
+| `ver` | `1` | Token format version |
+| `iss` | `https://integrator-3920884.okta.com/oauth2/default` | Issuer — the authorization server that signed the token |
+| `aud` | `0oazixl5re5JWfkeX697` | Audience — the client (app) the token was minted for |
+| `iat` | `1780334076` (6/1/2026, 10:14:36 AM) | Issued At |
+| `exp` | `1780337676` (6/1/2026, 11:14:36 AM) | Expiration — note the 1-hour lifetime |
+| `jti` | `ID.4l7L2Wiw0htGmlIss6eTavkbfI6sTv49nJvzq-y-3RM` | Unique token ID (helps detect replay) |
+| `amr` | `["mfa","otp","pwd","okta_verify"]` | Authentication Methods References — how the user proved identity (here: MFA via OTP, password, and Okta Verify) |
+| `idp` | `00ozixnqnhv4a6ktc697` | Identity Provider that authenticated the user |
+| `preferred_username` | `ola@ciracon.com` | User's preferred login name |
+| `auth_time` | `1780334075` (6/1/2026, 10:14:35 AM) | When the user last actively authenticated |
+| `at_hash` | `A7MgwphiPSkr0-hH2docOg` | Hash binding this ID token to its access token |
+
+### Access Token Claims
+
+The access token authorizes calls to APIs. Example claims:
+
+| Claim | Example value | Meaning |
+|-------|---------------|---------|
+| `ver` | `1` | Token format version |
+| `jti` | `AT.H8_YrHwi4_PM-a-3F6MhfE-RhivY4aOfrl2Ed_AFM3Q` | Unique token ID |
+| `iss` | `https://integrator-3920884.okta.com/oauth2/default` | Issuer |
+| `aud` | `api://default` | Audience — the **API** this token is meant for (contrast with the ID token's client-ID audience) |
+| `iat` | `1780334076` (6/1/2026, 10:14:36 AM) | Issued At |
+| `exp` | `1780337676` (6/1/2026, 11:14:36 AM) | Expiration |
+| `cid` | `0oazixl5re5JWfkeX697` | Client ID that requested the token |
+| `uid` | `00uzixnqrj995Gp8m697` | Okta's internal user identifier |
+| `scp` | `["profile","openid"]` | Scopes — the permissions granted to this token |
+| `auth_time` | `1780334075` (6/1/2026, 10:14:35 AM) | When the user last authenticated |
+| `sub` | `ola@ciracon.com` | Subject of the access token |
+
+> **Things to notice when teaching:**
+> - The two tokens have **different `aud` values**: the ID token is for the app
+>   (client ID), the access token is for the API (`api://default`).
+> - `amr` shows strong, **phishing-resistant MFA** was used.
+> - Tokens are **short-lived** (`exp − iat` = 1 hour).
+> - The `at_hash` in the ID token cryptographically ties it to the access token.
+
+### Raw Context JSON
+
+The page also exposes the full `req.userContext` under **"View Raw Context JSON"**,
+which contains the `userinfo` response plus the raw `access_token` and `id_token`
+JWTs (and their `token_type`, `scope`, and `expires_at`):
+
+```jsonc
+{
+  "userinfo": {
+    "sub": "00uzixnqrj995Gp8m697",
+    "name": "Ola Ekdahl",
+    "locale": "en_US",
+    "preferred_username": "ola@ciracon.com",
+    "given_name": "Ola",
+    "family_name": "Ekdahl",
+    "zoneinfo": "America/Los_Angeles",
+    "updated_at": 1769384227
+  },
+  "tokens": {
+    "token_type": "Bearer",
+    "expires_at": 1780337675,
+    "access_token": "eyJraWQiOiJJUk85...<truncated JWT>",
+    "scope": "profile openid",
+    "id_token": "eyJraWQiOiJJUk85...<truncated JWT>"
+  }
+}
+```
+
+> ⚠️ **These are live bearer credentials.** The raw `access_token` and
+> `id_token` are real, signed JWTs — anyone holding them can call the API or
+> impersonate the session until they expire. Only the **decoded payload** is safe
+> to share; never paste full tokens into issues, logs, or screenshots. You can
+> inspect a decoded token safely at [jwt.io](https://jwt.io).
+
 ## Okta Configuration
 
 To use this demo with your own Okta account:
