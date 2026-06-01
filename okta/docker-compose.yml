@@ -1,0 +1,55 @@
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # HashiCorp Vault (Dev Mode)
+  # ───────────────────────────────────────────────────────────────
+  # Dev mode runs an in-memory Vault that is automatically
+  # initialized and unsealed, with a known root token. It is great
+  # for demos but NOT for production (no persistence, no TLS, root
+  # token in plain text).
+  # ═══════════════════════════════════════════════════════════════
+  vault:
+    image: hashicorp/vault:1.18
+    container_name: okta-vault
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      # Bind the dev listener on all interfaces so the host can reach it.
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      # Address used by the `vault` CLI inside the container.
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    cap_add:
+      # Vault locks memory to avoid swapping secrets to disk.
+      - IPC_LOCK
+    command: ["vault", "server", "-dev"]
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ═══════════════════════════════════════════════════════════════
+  # One-shot seeder: writes the Okta client credentials into Vault
+  # at secret/okta. Reads values from the host environment so no
+  # secrets are baked into the image or compose file.
+  # ═══════════════════════════════════════════════════════════════
+  vault-seed:
+    image: hashicorp/vault:1.18
+    container_name: okta-vault-seed
+    depends_on:
+      vault:
+        condition: service_healthy
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_TOKEN: "root"
+      OKTA_CLIENT_ID: "${OKTA_CLIENT_ID:?Set OKTA_CLIENT_ID in your .env}"
+      OKTA_CLIENT_SECRET: "${OKTA_CLIENT_SECRET:?Set OKTA_CLIENT_SECRET in your .env}"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        vault kv put secret/okta \
+          client_id="$${OKTA_CLIENT_ID}" \
+          client_secret="$${OKTA_CLIENT_SECRET}" &&
+        echo "✓ Seeded secret/okta into Vault"
+    restart: "no"

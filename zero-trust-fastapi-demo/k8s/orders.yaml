@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orders-api
+  namespace: zt-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orders-api
+  namespace: zt-demo
+  labels:
+    app: orders-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orders-api
+  template:
+    metadata:
+      labels:
+        app: orders-api
+    spec:
+      serviceAccountName: orders-api
+      containers:
+        - name: orders-api
+          image: orders-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: jwt-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-api
+  namespace: zt-demo
+spec:
+  selector:
+    app: orders-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

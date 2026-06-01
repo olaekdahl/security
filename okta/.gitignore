@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Environment files (never commit real Okta secrets or Vault tokens)
+.env
+.env.*
+!.env.example
+.env.test
+
+# OS files
+.DS_Store

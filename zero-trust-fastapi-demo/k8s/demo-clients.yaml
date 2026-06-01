@@ -1,0 +1,59 @@
+# Two in-cluster Python clients. After Linkerd injection they receive distinct
+# workload identities because they run as different ServiceAccounts.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: demo-client
+  namespace: zt-demo
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bad-client
+  namespace: zt-demo
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-client
+  namespace: zt-demo
+  labels:
+    app: demo-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: demo-client
+  template:
+    metadata:
+      labels:
+        app: demo-client
+    spec:
+      serviceAccountName: demo-client
+      containers:
+        - name: python
+          image: python:3.12-slim
+          command: ["sleep", "36000"]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bad-client
+  namespace: zt-demo
+  labels:
+    app: bad-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bad-client
+  template:
+    metadata:
+      labels:
+        app: bad-client
+    spec:
+      serviceAccountName: bad-client
+      containers:
+        - name: python
+          image: python:3.12-slim
+          command: ["sleep", "36000"]
