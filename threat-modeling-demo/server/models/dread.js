@@ -206,84 +206,85 @@ function getRecommendation(score) {
 
 /**
  * Score common vulnerability types with DREAD
+ * All ratings are on the 0-10 scale; total = average of the 5 factors.
  */
 export const COMMON_VULNERABILITY_SCORES = {
   "SQL/NoSQL Injection": {
-    damage: 4,           // Complete database compromise
-    reproducibility: 3,  // Easily reproducible once found
-    exploitability: 2,   // Moderate skill needed
-    affectedUsers: 4,    // All users potentially affected
-    discoverability: 3,  // Easy to find with scanning
+    damage: 9,           // Complete database compromise possible
+    reproducibility: 8,  // Easily reproducible once found
+    exploitability: 7,   // Tools widely available
+    affectedUsers: 10,   // All users potentially affected
+    discoverability: 6,  // Found with automated scanning
     total: 8.0,
     riskLevel: "CRITICAL",
   },
-  
+
   "Cross-Site Scripting (XSS)": {
-    damage: 2,           // Session hijacking, phishing
-    reproducibility: 4,  // Always reproducible
-    exploitability: 3,   // Easy with basic knowledge
-    affectedUsers: 2,    // Targeted users
-    discoverability: 3,  // Easy to find
+    damage: 6,           // Session hijacking, phishing, credential theft
+    reproducibility: 8,  // Reliable once payload is crafted
+    exploitability: 8,   // Browser-based, minimal skill needed
+    affectedUsers: 6,    // Visitors of affected pages
+    discoverability: 7,  // Evident with basic testing
     total: 7.0,
     riskLevel: "HIGH",
   },
-  
+
   "Broken Authentication": {
-    damage: 4,           // Account takeover
-    reproducibility: 3,  // Depends on implementation
-    exploitability: 2,   // Moderate skill
-    affectedUsers: 3,    // Many users at risk
-    discoverability: 2,  // Requires analysis
+    damage: 8,           // Full account takeover
+    reproducibility: 7,  // Credential stuffing is repeatable
+    exploitability: 6,   // Automated tools available
+    affectedUsers: 7,    // Any user without MFA
+    discoverability: 7,  // Obvious with login page analysis
     total: 7.0,
     riskLevel: "HIGH",
   },
-  
+
   "Sensitive Data Exposure": {
-    damage: 3,           // Data breach
-    reproducibility: 2,  // Depends on conditions
-    exploitability: 2,   // Moderate skill
-    affectedUsers: 4,    // All users with sensitive data
-    discoverability: 2,  // Requires analysis
-    total: 6.5,
+    damage: 7,           // PII/financial data breach
+    reproducibility: 6,  // Depends on transport/storage config
+    exploitability: 6,   // Network sniffing or misconfigured endpoint
+    affectedUsers: 7,    // All users with sensitive data
+    discoverability: 7,  // TLS checks and header scanning reveal it
+    total: 6.6,
     riskLevel: "HIGH",
   },
-  
+
   "CSRF": {
-    damage: 2,           // Unauthorized actions
-    reproducibility: 4,  // Always reproducible
-    exploitability: 3,   // Easy
-    affectedUsers: 2,    // Targeted users
-    discoverability: 3,  // Obvious when looked for
+    damage: 6,           // Unauthorized state-changing actions
+    reproducibility: 8,  // Crafted link always works
+    exploitability: 8,   // Simple link or img tag
+    affectedUsers: 6,    // Authenticated users
+    discoverability: 7,  // Visible in form submissions without tokens
     total: 7.0,
     riskLevel: "HIGH",
   },
-  
+
   "Insecure Deserialization": {
-    damage: 4,           // RCE possible
-    reproducibility: 2,  // Requires specific conditions
-    exploitability: 1,   // Advanced skill needed
-    affectedUsers: 4,    // All users
-    discoverability: 1,  // Hard to find
+    damage: 8,           // RCE / full system compromise possible
+    reproducibility: 5,  // Requires specific gadget chain
+    exploitability: 5,   // Specialized knowledge required
+    affectedUsers: 9,    // All users if RCE is achieved
+    discoverability: 3,  // Hard to find without source review
     total: 6.0,
     riskLevel: "HIGH",
   },
-  
+
   "Security Misconfiguration": {
-    damage: 2,           // Information disclosure
-    reproducibility: 3,  // Usually reproducible
-    exploitability: 4,   // No skill needed
-    affectedUsers: 3,    // Many users
-    discoverability: 3,  // Easy to find
-    total: 7.5,
+    damage: 7,           // Information disclosure or direct access
+    reproducibility: 8,  // Config issues are consistently exploitable
+    exploitability: 8,   // Requires no special skill
+    affectedUsers: 7,    // Broad exposure
+    discoverability: 7,  // Scanner or manual header review
+    total: 7.4,
     riskLevel: "HIGH",
   },
-  
+
   "Missing Rate Limiting": {
-    damage: 2,           // DoS, brute force
-    reproducibility: 4,  // Always reproducible
-    exploitability: 4,   // No skill needed
-    affectedUsers: 4,    // All users (availability)
-    discoverability: 4,  // Obvious
+    damage: 8,           // DoS or brute-forced credentials
+    reproducibility: 10, // Always reproducible — no conditions needed
+    exploitability: 10,  // Any script or tool achieves it
+    affectedUsers: 9,    // All users (availability impact)
+    discoverability: 8,  // No token → obvious in minutes
     total: 9.0,
     riskLevel: "CRITICAL",
   },

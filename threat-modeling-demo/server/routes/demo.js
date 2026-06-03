@@ -255,19 +255,19 @@ router.get("/full-example", (_req, res) => {
   const dreadScores = [
     {
       threat: "NoSQL Injection via Registration",
-      ratings: { damage: 4, reproducibility: 3, exploitability: 2, affectedUsers: 4, discoverability: 3 },
+      ratings: { damage: 9, reproducibility: 8, exploitability: 7, affectedUsers: 10, discoverability: 6 },
     },
     {
       threat: "JWT Token Manipulation",
-      ratings: { damage: 3, reproducibility: 2, exploitability: 2, affectedUsers: 3, discoverability: 2 },
+      ratings: { damage: 8, reproducibility: 7, exploitability: 6, affectedUsers: 7, discoverability: 7 },
     },
     {
       threat: "Credential Stuffing",
-      ratings: { damage: 3, reproducibility: 4, exploitability: 4, affectedUsers: 2, discoverability: 4 },
+      ratings: { damage: 7, reproducibility: 9, exploitability: 9, affectedUsers: 8, discoverability: 7 },
     },
     {
       threat: "Sensitive Data Exposure",
-      ratings: { damage: 3, reproducibility: 2, exploitability: 2, affectedUsers: 4, discoverability: 2 },
+      ratings: { damage: 7, reproducibility: 6, exploitability: 6, affectedUsers: 7, discoverability: 7 },
     },
   ].map(item => ({
     ...item,
@@ -429,6 +429,116 @@ router.post("/interactive/dread", (req, res) => {
         score: data.total,
         level: data.riskLevel,
       })),
+    },
+  });
+});
+
+
+/**
+ * POST /api/demo/interactive/pasta
+ * Interactive PASTA analysis — contextualises the asset + STRIDE + DREAD results
+ */
+router.post("/interactive/pasta", (req, res) => {
+  const { asset, strideThreats, dreadScores } = req.body;
+
+  if (!asset?.name) {
+    return res.status(400).json({ error: "Please provide an asset with at least a name" });
+  }
+
+  // Build an appInfo object that PASTA can consume
+  const appInfo = {
+    name: asset.name,
+    businessFunction: `${asset.type || "component"} handling ${asset.containsSensitiveData ? "sensitive " : ""}data`,
+    dataClassification: asset.containsSensitiveData ? "Confidential (PII / sensitive data)" : "Internal",
+    compliance: asset.containsSensitiveData ? ["GDPR", "SOC2"] : [],
+    frontend: "React SPA",
+    backend: "Node.js/Express",
+    database: "MongoDB",
+    inputValidation: !asset.handlesUserInput,
+    strongAuth: !!asset.authenticationRequired,
+    securityHeaders: true,
+    riskTolerance: asset.containsSensitiveData ? "Low" : "Medium",
+    components: [
+      { name: asset.name, type: asset.type || "component", technology: "Custom" },
+    ],
+  };
+
+  // Summarise the STRIDE threats passed in (or use empty defaults)
+  const appliedThreats = Array.isArray(strideThreats)
+    ? strideThreats.filter(t => t.applicable)
+    : [];
+  const criticalDread = Array.isArray(dreadScores)
+    ? dreadScores.filter(s => s.riskLevel === "CRITICAL" || s.riskLevel === "HIGH")
+    : [];
+
+  const pastaStages = [
+    {
+      stage: 1,
+      name: "Define Business Objectives",
+      result: `Protecting ${asset.name}. Data classification: ${appInfo.dataClassification}. Risk tolerance: ${appInfo.riskTolerance}.`,
+      compliance: appInfo.compliance.length ? appInfo.compliance.join(", ") : "None identified",
+    },
+    {
+      stage: 2,
+      name: "Define Technical Scope",
+      result: `Asset type: ${asset.type || "component"}. Properties: ${[
+        asset.isPublicFacing ? "public-facing" : null,
+        asset.handlesUserInput ? "handles user input" : null,
+        asset.containsSensitiveData ? "contains sensitive data" : null,
+        asset.authenticationRequired ? "authentication required" : null,
+        asset.hasAdminFunctions ? "has admin functions" : null,
+      ].filter(Boolean).join(", ") || "none specified"}.`,
+    },
+    {
+      stage: 3,
+      name: "Decompose Application",
+      result: `Entry points identified: ${asset.isPublicFacing ? "public API/UI" : "internal service"}. Roles: ${asset.hasAdminFunctions ? "admin, user" : "user"}.`,
+    },
+    {
+      stage: 4,
+      name: "Threat Analysis (STRIDE)",
+      result: `${appliedThreats.length} STRIDE threat categories applicable.`,
+      threats: appliedThreats.map(t => `${t.categoryName} (${t.severity})`),
+    },
+    {
+      stage: 5,
+      name: "Vulnerability Analysis",
+      result: `Key vulnerabilities to review: ${[
+        asset.handlesUserInput ? "Injection / XSS" : null,
+        asset.isPublicFacing ? "Authentication bypass / rate limiting" : null,
+        asset.containsSensitiveData ? "Sensitive data exposure" : null,
+        asset.hasAdminFunctions ? "Privilege escalation" : null,
+      ].filter(Boolean).join("; ") || "No specific flags from properties"}.`,
+    },
+    {
+      stage: 6,
+      name: "Attack Analysis",
+      result: `Top attack vectors: ${[
+        asset.isPublicFacing ? "External attacker via public endpoint" : "Insider / lateral movement",
+        asset.handlesUserInput ? "Injection attacks" : null,
+        asset.authenticationRequired ? "Credential abuse / session hijacking" : "Unauthenticated access",
+      ].filter(Boolean).join("; ")}.`,
+    },
+    {
+      stage: 7,
+      name: "Risk & Impact Analysis (DREAD)",
+      result: `${criticalDread.length} high-priority threat(s) identified from DREAD scoring.`,
+      topRisks: criticalDread.slice(0, 3).map(s => `${s.threat}: ${s.score} (${s.riskLevel})`),
+      recommendation: criticalDread.length
+        ? `Prioritise: ${criticalDread[0]?.threat} — score ${criticalDread[0]?.score}`
+        : "No critical threats identified; continue with regular security review cycle.",
+    },
+  ];
+
+  res.json({
+    message: "PASTA analysis complete",
+    asset,
+    pastaStages,
+    summary: {
+      completedStages: 7,
+      appliedStrideCategories: appliedThreats.length,
+      highPriorityThreats: criticalDread.length,
+      topRecommendation: pastaStages[6].recommendation,
     },
   });
 });

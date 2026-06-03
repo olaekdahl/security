@@ -375,6 +375,117 @@ function StridePage() {
           ))}
         </ol>
       </div>
+
+      <div className="card">
+        <h2 className="card-title">Data Flow Diagram — Apply STRIDE to Each Element</h2>
+        <p className="card-description" style={{ marginBottom: '1.5rem' }}>
+          Identify every trust boundary crossing, data store, and process in the DFD and apply STRIDE to each one.
+        </p>
+
+        {/* Static DFD representation since mermaid is loaded via CDN */}
+        <div style={{ overflowX: 'auto' }}>
+          <div style={{ display: 'flex', gap: '2rem', minWidth: '700px', padding: '1rem 0' }}>
+            {/* Internet trust boundary */}
+            <div style={{ flex: 1, border: '2px dashed #ef4444', borderRadius: '0.75rem', padding: '1rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#ef4444', fontWeight: 'bold', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>TRUST BOUNDARY: INTERNET</div>
+              {[
+                { label: 'User Browser', sub: 'React SPA', icon: '👤' },
+                { label: 'Admin Browser', sub: 'React SPA', icon: '🛡️' },
+                { label: 'Third-Party IdP', sub: 'OIDC', icon: '🔑' },
+                { label: 'Email Provider', sub: 'SES / SendGrid', icon: '📧' },
+              ].map(n => (
+                <div key={n.label} style={{ padding: '0.5rem 0.75rem', background: 'var(--bg-dark)', borderRadius: '0.375rem', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span>{n.icon}</span>
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: '500' }}>{n.label}</div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{n.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Arrow */}
+            <div style={{ display: 'flex', alignItems: 'center', color: 'var(--text-secondary)', fontSize: '1.5rem' }}>→</div>
+
+            {/* AWS trust boundary */}
+            <div style={{ flex: 2, border: '2px dashed #6366f1', borderRadius: '0.75rem', padding: '1rem' }}>
+              <div style={{ fontSize: '0.75rem', color: '#6366f1', fontWeight: 'bold', marginBottom: '0.75rem', letterSpacing: '0.05em' }}>TRUST BOUNDARY: AWS VPC</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                {[
+                  { label: 'CloudFront', sub: 'CDN (optional)', icon: '🌐', shape: 'process' },
+                  { label: 'WAF', sub: 'Web App Firewall', icon: '🔥', shape: 'process' },
+                  { label: 'API Gateway / ALB', sub: 'Edge', icon: '⚖️', shape: 'process' },
+                  { label: 'Node API (Express)', sub: 'Backend service', icon: '⚙️', shape: 'process' },
+                  { label: 'Worker', sub: 'Queue consumer', icon: '🔄', shape: 'process' },
+                  { label: 'SQS Queue', sub: 'Async jobs', icon: '📬', shape: 'store' },
+                  { label: 'RDS / Postgres', sub: 'Data store', icon: '🗄️', shape: 'store' },
+                  { label: 'S3 Bucket', sub: 'File uploads', icon: '🪣', shape: 'store' },
+                  { label: 'Redis Cache', sub: 'Optional', icon: '⚡', shape: 'store' },
+                  { label: 'Secrets Manager', sub: 'Credentials', icon: '🔐', shape: 'store' },
+                  { label: 'CloudWatch Logs', sub: 'Monitoring', icon: '📊', shape: 'process' },
+                  { label: 'CloudTrail', sub: 'Audit logs', icon: '📋', shape: 'process' },
+                ].map(n => (
+                  <div key={n.label} style={{ padding: '0.4rem 0.6rem', background: n.shape === 'store' ? 'rgba(99,102,241,0.1)' : 'var(--bg-dark)', borderRadius: '0.375rem', border: `1px solid ${n.shape === 'store' ? '#6366f1' : 'var(--border)'}`, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span style={{ fontSize: '0.9rem' }}>{n.icon}</span>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: '500' }}>{n.label}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{n.sub}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* STRIDE-per-element table */}
+        <div style={{ marginTop: '1.5rem' }}>
+          <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>STRIDE Applied to Key Elements</h3>
+          <div className="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Element</th>
+                  <th>S</th>
+                  <th>T</th>
+                  <th>R</th>
+                  <th>I</th>
+                  <th>D</th>
+                  <th>E</th>
+                  <th>Key Threat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { el: 'User Browser', s: '✓', t: '', r: '✓', i: '✓', d: '', e: '', key: 'Token theft / XSS' },
+                  { el: 'API Gateway', s: '', t: '✓', r: '', i: '✓', d: '✓', e: '', key: 'Request tampering, DDoS' },
+                  { el: 'Node API', s: '✓', t: '✓', r: '✓', i: '✓', d: '✓', e: '✓', key: 'All STRIDE categories apply' },
+                  { el: 'RDS / Postgres', s: '', t: '✓', r: '', i: '✓', d: '✓', e: '', key: 'SQL injection, data theft' },
+                  { el: 'S3 Bucket', s: '', t: '✓', r: '', i: '✓', d: '', e: '', key: 'Misconfigured public access' },
+                  { el: 'Third-Party IdP', s: '✓', t: '', r: '', i: '', d: '✓', e: '', key: 'Spoofed tokens, IdP outage' },
+                  { el: 'Secrets Manager', s: '', t: '✓', r: '', i: '✓', d: '', e: '✓', key: 'Secret exfiltration, privilege escalation' },
+                ].map(row => (
+                  <tr key={row.el}>
+                    <td><strong>{row.el}</strong></td>
+                    {['s','t','r','i','d','e'].map(f => (
+                      <td key={f} style={{ textAlign: 'center', color: row[f] ? '#22c55e' : 'var(--text-secondary)' }}>{row[f] || '–'}</td>
+                    ))}
+                    <td style={{ fontSize: '0.8rem' }}>{row.key}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+            <span><strong>S</strong> = Spoofing</span>
+            <span><strong>T</strong> = Tampering</span>
+            <span><strong>R</strong> = Repudiation</span>
+            <span><strong>I</strong> = Info Disclosure</span>
+            <span><strong>D</strong> = Denial of Service</span>
+            <span><strong>E</strong> = Elevation of Privilege</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -518,6 +629,136 @@ function DreadPage() {
             </tbody>
           </table>
         </div>
+      </div>
+
+      <div className="card">
+        <h2 className="card-title">DREAD vs CVSS — When to Use Each</h2>
+        <p className="card-description" style={{ marginBottom: '1.5rem' }}>
+          DREAD and CVSS are complementary scoring methodologies. Understanding their differences helps you choose the right tool for each situation.
+        </p>
+
+        <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Aspect</th>
+                <th>DREAD</th>
+                <th>CVSS v3.1</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { aspect: 'Origin', dread: 'Microsoft (~1999)', cvss: 'FIRST (2005, v3.1 in 2019)' },
+                { aspect: 'Scale', dread: '0–10 (simple average)', cvss: '0–10 (weighted formula)' },
+                { aspect: 'Complexity', dread: 'Simple, 5 factors', cvss: 'Complex, 8+ metrics' },
+                { aspect: 'Time to Score', dread: '2–5 minutes', cvss: '5–15 minutes' },
+                { aspect: 'Standardisation', dread: 'Informal', cvss: 'Industry standard' },
+                { aspect: 'Best For', dread: 'Rapid triage, internal', cvss: 'CVEs, vendor advisories' },
+              ].map(row => (
+                <tr key={row.aspect}>
+                  <td><strong>{row.aspect}</strong></td>
+                  <td>{row.dread}</td>
+                  <td>{row.cvss}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Factor Mapping: DREAD → CVSS</h3>
+        <div className="table-container" style={{ marginBottom: '1.5rem' }}>
+          <table>
+            <thead>
+              <tr>
+                <th>DREAD Factor</th>
+                <th>CVSS Equivalent</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                { dread: 'Damage', cvss: 'Impact (C, I, A)', note: 'CVSS splits into Confidentiality, Integrity, Availability' },
+                { dread: 'Reproducibility', cvss: 'Attack Complexity (AC)', note: 'Inverse relationship — low reproducibility = high complexity' },
+                { dread: 'Exploitability', cvss: 'Attack Vector (AV) + Privileges Required (PR)', note: 'CVSS is more granular' },
+                { dread: 'Affected Users', cvss: 'Scope (S)', note: 'CVSS has binary scope change' },
+                { dread: 'Discoverability', cvss: '(no direct equivalent)', note: 'CVSS assumes public knowledge for CVEs' },
+              ].map(row => (
+                <tr key={row.dread}>
+                  <td><strong>{row.dread}</strong></td>
+                  <td>{row.cvss}</td>
+                  <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{row.note}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Example: SQL Injection</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem', borderTop: '3px solid #ea580c' }}>
+            <strong style={{ color: '#ea580c' }}>DREAD Score: 8.6 CRITICAL</strong>
+            <div className="table-container" style={{ marginTop: '0.75rem' }}>
+              <table style={{ fontSize: '0.8rem' }}>
+                <tbody>
+                  {[['Damage', 9, 'Full database access'], ['Reproducibility', 9, 'Works reliably'], ['Exploitability', 7, 'Tools available'], ['Affected Users', 10, 'All users at risk'], ['Discoverability', 8, 'Found with scanning']].map(([f, s, r]) => (
+                    <tr key={f}><td>{f}</td><td><strong>{s}</strong></td><td style={{ color: 'var(--text-secondary)' }}>{r}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div style={{ padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem', borderTop: '3px solid #6366f1' }}>
+            <strong style={{ color: '#6366f1' }}>CVSS v3.1 Score: 10.0 CRITICAL</strong>
+            <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', fontFamily: 'monospace', background: 'rgba(99,102,241,0.1)', padding: '0.5rem', borderRadius: '0.375rem', wordBreak: 'break-all' }}>
+              CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+            </div>
+            <div className="table-container" style={{ marginTop: '0.75rem' }}>
+              <table style={{ fontSize: '0.8rem' }}>
+                <tbody>
+                  {[['AV: Network', 'Remote attack'], ['AC: Low', 'No special conditions'], ['PR: None', 'No auth needed'], ['S: Changed', 'Affects beyond component'], ['C/I/A: High', 'Full data access/modify/drop']].map(([m, r]) => (
+                    <tr key={m}><td><strong>{m}</strong></td><td style={{ color: 'var(--text-secondary)' }}>{r}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem' }}>
+            <strong style={{ color: '#22c55e' }}>Use DREAD when…</strong>
+            <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem', fontSize: '0.875rem' }}>
+              {['Rapid threat modeling sessions', 'Internal risk prioritisation', 'Design-phase security review', 'Training new security engineers', 'Quick business risk communication', 'Agile sprint planning'].map(i => <li key={i} style={{ marginBottom: '0.25rem' }}>{i}</li>)}
+            </ul>
+          </div>
+          <div style={{ padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem' }}>
+            <strong style={{ color: '#6366f1' }}>Use CVSS when…</strong>
+            <ul style={{ marginTop: '0.5rem', paddingLeft: '1.25rem', fontSize: '0.875rem' }}>
+              {['Publishing CVE advisories', 'Vendor security bulletins', 'Compliance requirements (PCI-DSS, etc.)', 'SLAs for vulnerability remediation', 'Cross-organisation comparison', 'Automated vulnerability management'].map(i => <li key={i} style={{ marginBottom: '0.25rem' }}>{i}</li>)}
+            </ul>
+          </div>
+        </div>
+
+        <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Score Conversion Approximation</h3>
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr><th>DREAD Range</th><th>≈ CVSS Range</th><th>Risk Level</th></tr>
+            </thead>
+            <tbody>
+              {[['0 – 2.9', '0 – 3.9', 'low', 'Low'], ['3.0 – 5.9', '4.0 – 6.9', 'medium', 'Medium'], ['6.0 – 7.9', '7.0 – 8.9', 'high', 'High'], ['8.0 – 10.0', '9.0 – 10.0', 'critical', 'Critical']].map(([d, c, cls, lbl]) => (
+                <tr key={d}>
+                  <td><strong>{d}</strong></td>
+                  <td>{c}</td>
+                  <td><span className={`badge badge-${cls}`}>{lbl}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          ⚠️ This is an approximation only. Always score using the proper methodology for your use case.
+        </p>
       </div>
     </div>
   );
@@ -732,6 +973,14 @@ function DemoPage() {
     damage: 5, reproducibility: 5, exploitability: 5, affectedUsers: 5, discoverability: 5
   });
   const [dreadResult, setDreadResult] = useState(null);
+  const [assetProperties, setAssetProperties] = useState({
+    isPublicFacing: false,
+    handlesUserInput: false,
+    containsSensitiveData: false,
+    authenticationRequired: false,
+    hasAdminFunctions: false,
+  });
+  const [pastaResult, setPastaResult] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -742,7 +991,7 @@ function DemoPage() {
     if (!customAsset.name) return;
     setLoading(true);
     try {
-      const res = await api.post('/demo/interactive/stride', { asset: customAsset });
+      const res = await api.post('/demo/interactive/stride', { asset: { ...customAsset, ...assetProperties } });
       setStrideResult(res.data);
       setActiveStep(2);
     } catch (err) {
@@ -761,6 +1010,26 @@ function DemoPage() {
       });
       setDreadResult(res.data);
       setActiveStep(3);
+    } catch (err) {
+      console.error(err);
+    }
+    setLoading(false);
+  };
+
+  const runPastaAnalysis = async () => {
+    setLoading(true);
+    try {
+      const threats = strideResult?.analysis?.threats || [];
+      const scores = dreadResult?.score
+        ? [{ threat: customThreat, score: dreadResult.score.total, riskLevel: dreadResult.score.riskLevel?.level }]
+        : [];
+      const res = await api.post('/demo/interactive/pasta', {
+        asset: { ...customAsset, ...assetProperties },
+        strideThreats: threats,
+        dreadScores: scores,
+      });
+      setPastaResult(res.data);
+      setActiveStep(4);
     } catch (err) {
       console.error(err);
     }
@@ -790,6 +1059,7 @@ function DemoPage() {
           { num: 1, title: 'Identify Assets' },
           { num: 2, title: 'STRIDE Analysis' },
           { num: 3, title: 'DREAD Scoring' },
+          { num: 4, title: 'PASTA Context' },
         ].map(step => (
           <div 
             key={step.num}
@@ -853,6 +1123,27 @@ function DemoPage() {
                 {assetTypes.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
             </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '500' }}>Asset Properties</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                {[
+                  { key: 'isPublicFacing', label: '🌐 Public-facing' },
+                  { key: 'handlesUserInput', label: '⌨️ Handles user input' },
+                  { key: 'containsSensitiveData', label: '🔒 Contains sensitive data' },
+                  { key: 'authenticationRequired', label: '🔑 Requires authentication' },
+                  { key: 'hasAdminFunctions', label: '⚙️ Has admin functions' },
+                ].map(({ key, label }) => (
+                  <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', padding: '0.5rem', background: assetProperties[key] ? 'var(--primary-dim, rgba(99,102,241,0.15))' : 'var(--bg-dark)', borderRadius: '0.375rem', border: `1px solid ${assetProperties[key] ? 'var(--primary)' : 'var(--border)'}` }}>
+                    <input
+                      type="checkbox"
+                      checked={assetProperties[key]}
+                      onChange={(e) => setAssetProperties({ ...assetProperties, [key]: e.target.checked })}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
             <button 
               className="btn btn-primary" 
               onClick={runStrideAnalysis}
@@ -863,13 +1154,23 @@ function DemoPage() {
           </div>
 
           <div style={{ marginTop: '2rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem' }}>
-            <strong>💡 Example Assets:</strong>
-            <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
-              <li>User Authentication Service</li>
-              <li>Customer Database</li>
-              <li>File Upload API</li>
-              <li>Admin Dashboard</li>
-            </ul>
+            <strong>⚡ Try an example:</strong>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
+              {[
+                { name: 'Payment API', type: 'api', props: { isPublicFacing: true, handlesUserInput: true, containsSensitiveData: true, authenticationRequired: true, hasAdminFunctions: false } },
+                { name: 'Customer Database', type: 'database', props: { isPublicFacing: false, handlesUserInput: false, containsSensitiveData: true, authenticationRequired: true, hasAdminFunctions: false } },
+                { name: 'Admin Portal', type: 'authentication', props: { isPublicFacing: true, handlesUserInput: true, containsSensitiveData: true, authenticationRequired: true, hasAdminFunctions: true } },
+              ].map(preset => (
+                <button
+                  key={preset.name}
+                  className="btn btn-secondary"
+                  onClick={() => { setCustomAsset({ name: preset.name, type: preset.type }); setAssetProperties(preset.props); }}
+                  style={{ fontSize: '0.85rem' }}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -905,13 +1206,23 @@ function DemoPage() {
                 <div style={{ marginTop: '0.5rem', color: 'var(--text-secondary)' }}>
                   Protects: {threat.securityProperty}
                 </div>
-                <div style={{ marginTop: '0.75rem' }}>
-                  <strong>Specific Threats:</strong>
-                  <ul style={{ marginTop: '0.25rem', paddingLeft: '1.5rem' }}>
-                    {threat.specificThreats?.slice(0, 3).map((t, i) => (
-                      <li key={i}>{t}</li>
-                    ))}
-                  </ul>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginTop: '0.75rem' }}>
+                  <div>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>THREATS</strong>
+                    <ul style={{ marginTop: '0.25rem', paddingLeft: '1.25rem' }}>
+                      {threat.specificThreats?.slice(0, 3).map((t, i) => (
+                        <li key={i} style={{ fontSize: '0.875rem', marginBottom: '0.2rem' }}>{t}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    <strong style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>MITIGATIONS</strong>
+                    <ul style={{ marginTop: '0.25rem', paddingLeft: '1.25rem' }}>
+                      {threat.recommendations?.slice(0, 3).map((r, i) => (
+                        <li key={i} style={{ fontSize: '0.875rem', marginBottom: '0.2rem', color: 'var(--success, #22c55e)' }}>{r}</li>
+                      ))}
+                    </ul>
+                  </div>
                 </div>
               </div>
             ))}
@@ -964,11 +1275,11 @@ function DemoPage() {
             <div>
               {Object.entries(dreadRatings).map(([key, value]) => {
                 const labels = {
-                  damage: { name: 'Damage Potential', desc: 'How severe would the impact be?' },
-                  reproducibility: { name: 'Reproducibility', desc: 'How easy to reproduce the attack?' },
-                  exploitability: { name: 'Exploitability', desc: 'How easy to perform the attack?' },
-                  affectedUsers: { name: 'Affected Users', desc: 'How many users would be impacted?' },
-                  discoverability: { name: 'Discoverability', desc: 'How easy to discover the vulnerability?' },
+                  damage: { name: 'Damage Potential', desc: 'How bad is the impact?', anchors: ['0 = no damage', '5 = moderate breach', '10 = catastrophic / full system compromise'] },
+                  reproducibility: { name: 'Reproducibility', desc: 'How consistently can the attack be repeated?', anchors: ['0 = essentially impossible', '5 = requires some skill', '10 = always works, trivial'] },
+                  exploitability: { name: 'Exploitability', desc: 'How much skill/effort does exploitation require?', anchors: ['0 = requires custom hardware', '5 = public tools, moderate skill', '10 = browser only, no tools'] },
+                  affectedUsers: { name: 'Affected Users', desc: 'What percentage of users are impacted?', anchors: ['0 = none', '5 = 10–25% of users', '10 = all users'] },
+                  discoverability: { name: 'Discoverability', desc: 'How easy is the vulnerability to find?', anchors: ['0 = source code + expert analysis', '5 = standard security scanning', '10 = publicly known / documented'] },
                 };
                 return (
                   <div key={key} className="dread-slider">
@@ -984,6 +1295,9 @@ function DemoPage() {
                       onChange={(e) => setDreadRatings({ ...dreadRatings, [key]: parseInt(e.target.value) })}
                     />
                     <div className="dread-slider-description">{labels[key].desc}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '0.2rem', opacity: 0.75 }}>
+                      {labels[key].anchors.map((a, i) => <span key={i}>{a}</span>)}
+                    </div>
                   </div>
                 );
               })}
@@ -1027,6 +1341,17 @@ function DemoPage() {
             </div>
           </div>
 
+          {dreadResult?.score && (
+            <div style={{ marginTop: '1.5rem', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem' }}>
+              <strong style={{ fontSize: '0.875rem' }}>Remediation actions:</strong>
+              <ul style={{ marginTop: '0.5rem', paddingLeft: '1.5rem' }}>
+                {dreadResult.score.recommendation?.actions?.map((a, i) => (
+                  <li key={i} style={{ fontSize: '0.875rem', marginBottom: '0.25rem' }}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
             <button className="btn btn-secondary" onClick={() => setActiveStep(1)}>
               ← Start Over
@@ -1034,9 +1359,108 @@ function DemoPage() {
             <button className="btn btn-secondary" onClick={() => setActiveStep(2)}>
               ← Back to STRIDE
             </button>
+            <button className="btn btn-primary" onClick={runPastaAnalysis} disabled={loading}>
+              {loading ? 'Running…' : 'Contextualise with PASTA →'}
+            </button>
           </div>
         </div>
       )}
+
+      {/* Step 4: PASTA */}
+      {activeStep === 4 && (
+        <div className="card">
+          <h2 className="card-title">Step 4: PASTA — Process for Attack Simulation & Threat Analysis</h2>
+          <p className="card-description" style={{ marginBottom: '1.5rem' }}>
+            PASTA is the <em>process</em> that wraps STRIDE and DREAD. It frames your findings in a
+            risk-centric, business-driven context across 7 stages.
+          </p>
+
+          {pastaResult ? (
+            <>
+              <div className="stats-grid" style={{ marginBottom: '1.5rem' }}>
+                <div className="stat-card">
+                  <div className="stat-value">{pastaResult.summary.completedStages}</div>
+                  <div className="stat-label">Stages Completed</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value">{pastaResult.summary.appliedStrideCategories}</div>
+                  <div className="stat-label">STRIDE Threats</div>
+                </div>
+                <div className="stat-card">
+                  <div className="stat-value" style={{ color: 'var(--critical)' }}>{pastaResult.summary.highPriorityThreats}</div>
+                  <div className="stat-label">High-Priority</div>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gap: '0.75rem' }}>
+                {pastaResult.pastaStages.map(stage => (
+                  <div key={stage.stage} style={{ padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem', borderLeft: `4px solid ${stage.stage === 4 ? '#6366f1' : stage.stage === 7 ? 'var(--critical)' : 'var(--border)'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                      <strong>Stage {stage.stage}: {stage.name}</strong>
+                      {(stage.stage === 4 || stage.stage === 7) && (
+                        <span className="badge badge-info">{stage.stage === 4 ? 'STRIDE feeds here' : 'DREAD feeds here'}</span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>{stage.result}</p>
+                    {stage.threats?.length > 0 && (
+                      <ul style={{ marginTop: '0.25rem', paddingLeft: '1.25rem' }}>
+                        {stage.threats.map((t, i) => <li key={i} style={{ fontSize: '0.8rem' }}>{t}</li>)}
+                      </ul>
+                    )}
+                    {stage.topRisks?.length > 0 && (
+                      <ul style={{ marginTop: '0.25rem', paddingLeft: '1.25rem' }}>
+                        {stage.topRisks.map((r, i) => <li key={i} style={{ fontSize: '0.8rem', color: '#ea580c' }}>{r}</li>)}
+                      </ul>
+                    )}
+                    {stage.recommendation && (
+                      <div style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(220,38,38,0.1)', borderRadius: '0.25rem', fontSize: '0.8rem', color: 'var(--critical)' }}>
+                        ⚡ {stage.recommendation}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-secondary)' }}>
+              Loading PASTA analysis…
+            </div>
+          )}
+
+          <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
+            <button className="btn btn-secondary" onClick={() => setActiveStep(1)}>← Start Over</button>
+            <button className="btn btn-secondary" onClick={() => setActiveStep(3)}>← Back to DREAD</button>
+          </div>
+        </div>
+      )}
+
+      {/* How the Frameworks Work Together */}
+      <div className="card" style={{ marginTop: '2rem' }}>
+        <h2 className="card-title">🔗 How STRIDE, DREAD & PASTA Work Together</h2>
+        <p className="card-description" style={{ marginBottom: '1rem' }}>
+          Each framework plays a distinct role. Together they form a complete threat modeling workflow.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: '0', overflowX: 'auto' }}>
+          {[
+            { label: 'PASTA', sub: 'Stages 1–3', role: 'Define scope, objectives, decompose components', color: '#6366f1', badge: 'Process' },
+            { label: '→', sub: '', role: '', color: 'transparent', badge: '' },
+            { label: 'STRIDE', sub: 'Stage 4', role: 'Identify threats by category for each asset', color: '#0891b2', badge: 'Identify' },
+            { label: '→', sub: '', role: '', color: 'transparent', badge: '' },
+            { label: 'DREAD', sub: 'Stage 7', role: 'Score and prioritise threats 0–10', color: '#ea580c', badge: 'Prioritise' },
+            { label: '→', sub: '', role: '', color: 'transparent', badge: '' },
+            { label: 'Risk Register', sub: 'Output', role: 'Ordered remediation plan with timelines', color: '#16a34a', badge: 'Act' },
+          ].map((item, i) => item.label === '→' ? (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '0 0.5rem', color: 'var(--text-secondary)', fontSize: '1.5rem' }}>→</div>
+          ) : (
+            <div key={i} style={{ flex: 1, minWidth: '130px', padding: '1rem', background: 'var(--bg-dark)', borderRadius: '0.5rem', borderTop: `3px solid ${item.color}`, textAlign: 'center' }}>
+              <div style={{ fontWeight: 'bold', fontSize: '1rem', color: item.color }}>{item.label}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', margin: '0.25rem 0' }}>{item.sub}</div>
+              <div style={{ fontSize: '0.8rem', marginTop: '0.5rem' }}>{item.role}</div>
+              {item.badge && <span className="badge badge-info" style={{ marginTop: '0.5rem', display: 'inline-block', background: item.color + '22', color: item.color, border: `1px solid ${item.color}` }}>{item.badge}</span>}
+            </div>
+          ))}
+        </div>
+      </div>
 
       {/* Reference: Example from API */}
       <div className="card" style={{ marginTop: '2rem' }}>
@@ -1061,6 +1485,36 @@ function DemoPage() {
             <div className="stat-label">High</div>
           </div>
         </div>
+
+        {example.step3_dread?.prioritizedThreats?.length > 0 && (
+          <div style={{ marginTop: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.95rem', marginBottom: '0.75rem' }}>Prioritised Remediation Plan</h3>
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Threat</th>
+                    <th>DREAD</th>
+                    <th>Risk</th>
+                    <th>Timeline</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {example.step3_dread.prioritizedThreats.map((t, i) => (
+                    <tr key={i}>
+                      <td>{i + 1}</td>
+                      <td>{t.threat}</td>
+                      <td><strong>{t.score}</strong></td>
+                      <td><span className={`badge badge-${t.riskLevel.toLowerCase()}`}>{t.riskLevel}</span></td>
+                      <td style={{ fontSize: '0.8rem' }}>{t.timeline}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
