@@ -56,7 +56,13 @@ npm run dev
 
 ## 📚 Framework Deep Dives
 
-### STRIDE - Threat Identification
+Each section below shows **the important code that powers the demo** and explains what it
+does. The full implementations live in [server/models/](server/models/) and the runnable
+walkthrough is [scripts/demo.sh](scripts/demo.sh).
+
+---
+
+### Demo 1: STRIDE - Threat Identification
 
 STRIDE helps identify threats by categorizing them into 6 types:
 
@@ -69,14 +75,72 @@ STRIDE helps identify threats by categorizing them into 6 types:
 | **D** | Denial of Service | Availability | Can the system be made unavailable? |
 | **E** | Elevation of Privilege | Authorization | Can users gain unauthorized access? |
 
-**Demo Endpoint:**
-```bash
-curl http://localhost:3001/api/demo/stride/example | jq .
+#### Key code 1 — the threat catalog
+
+Each STRIDE category is modeled as data so the engine can attach examples, mitigations, and
+the security property it protects. From [server/models/stride.js](server/models/stride.js):
+
+```js
+export const STRIDE_CATEGORIES = {
+  TAMPERING: {
+    code: "T",
+    name: "Tampering",
+    description: "Modifying data or code without authorization",
+    securityProperty: "Integrity",          // the CIA property this threat breaks
+    examples: ["SQL/NoSQL injection", "Cross-site scripting (XSS)", ...],
+    mitigations: ["Input validation and sanitization", "Parameterized queries", ...],
+    affectedAssets: ["databases", "files", "configurations", "user inputs"],
+  },
+  // ...Spoofing, Repudiation, Information Disclosure, DoS, Elevation of Privilege
+};
 ```
 
-### PASTA - Risk-Centric Analysis
+**What it does:** turns STRIDE from a memory aid into a structured knowledge base. Every
+category carries the mitigations and security property it maps to, so analysis output is
+consistent and explainable instead of free-form.
 
-PASTA (Process for Attack Simulation and Threat Analysis) is a 7-stage methodology:
+#### Key code 2 — applying STRIDE to an asset
+
+The engine walks every category and decides whether it *applies* to the asset and *how
+severe* it is, based on the asset's properties:
+
+```js
+case "INFORMATION_DISCLOSURE":
+  // Applies if the asset is a database/API/user store/file/config/credential
+  applicable = ["database", "api", "user", "file", "config", "credential"].some(
+    t => assetType.includes(t) || assetName.includes(t)
+  );
+  if (applicable) {
+    // Severity is driven by the asset's own flags
+    severity = asset.containsSensitiveData ? "CRITICAL" : "MEDIUM";
+    specificThreats = ["Data exposure", "Error message leakage", "Unauthorized data access"];
+    recommendations = ["Encrypt sensitive data", "Implement proper access controls", ...];
+  }
+  break;
+```
+
+**What it does:** makes the analysis *context-aware*. A public-facing API raises the DoS
+severity; an asset holding sensitive data pushes Information Disclosure to `CRITICAL`. The
+output is a tailored list of applicable threats with severity and fixes — not a generic
+checklist.
+
+**Run it:**
+```bash
+curl http://localhost:3001/api/demo/stride/example | jq .
+
+# Analyze your own asset — flags change the results
+curl -X POST http://localhost:3001/api/demo/interactive/stride \
+  -H "Content-Type: application/json" \
+  -d '{"asset":{"name":"Customer Database","type":"database",
+       "containsSensitiveData":true,"handlesUserInput":true,"hasAuditLog":true}}' | jq .
+```
+
+---
+
+### Demo 2: PASTA - Risk-Centric Analysis
+
+PASTA (Process for Attack Simulation and Threat Analysis) is a 7-stage methodology that
+moves from business context all the way to attack simulation and risk:
 
 1. **Define Business Objectives** - What are we protecting and why?
 2. **Define Technical Scope** - Architecture, components, data flows
@@ -86,12 +150,45 @@ PASTA (Process for Attack Simulation and Threat Analysis) is a 7-stage methodolo
 6. **Attack Analysis** - Attack trees, scenarios, simulations
 7. **Risk & Impact Analysis** - Scores, priorities, mitigations
 
-**Demo Endpoint:**
-```bash
-curl http://localhost:3001/api/demo/pasta/example | jq .
+#### Key code — each stage is a structured process step
+
+From [server/models/pasta.js](server/models/pasta.js), every stage declares its activities,
+the artifacts it produces, and the questions it forces you to answer:
+
+```js
+export const PASTA_STAGES = {
+  STAGE_2: {
+    number: 2,
+    name: "Define Technical Scope",
+    activities: ["Document application architecture", "Map data flows",
+                 "Identify trust boundaries", ...],
+    outputs:    ["Architecture diagram", "Data flow diagram (DFD)",
+                 "Trust boundary map", ...],          // ← links to docs/dfd-level1.mmd
+    questions:  ["What are the main components?", "Where does data flow?",
+                 "Where are the trust boundaries?", ...],
+  },
+  // STAGE_1 Business Objectives ... STAGE_7 Risk & Impact Analysis
+};
 ```
 
-### DREAD - Risk Scoring
+**What it does:** encodes PASTA as a repeatable pipeline. Because each stage names its
+**outputs**, the methodology connects directly to the other artifacts in this repo — e.g.
+Stage 2's "Data flow diagram" is [docs/dfd-level1.mmd](docs/dfd-level1.mmd), and Stage 5's
+vulnerability analysis feeds the DREAD scores below. The `questions` array is what makes
+PASTA *risk-centric*: you answer business and attacker questions before rating anything.
+
+**Run it:**
+```bash
+curl http://localhost:3001/api/demo/pasta/example | jq '{
+  application: .application.name,
+  stagesCompleted: .analysis.summary.completedStages,
+  stages: [.analysis.stages[] | {stage: .number, name: .name, status: .status}]
+}'
+```
+
+---
+
+### Demo 3: DREAD - Risk Scoring
 
 DREAD provides a quantitative risk score (0-10):
 
@@ -103,7 +200,48 @@ DREAD provides a quantitative risk score (0-10):
 | **A**ffected Users | How many impacted? | 0=None → 10=All users |
 | **D**iscoverability | How easy to find? | 0=Very hard → 10=Trivial |
 
-**Score = Average(D + R + E + A + D) × 2.5**
+#### Key code 1 — turning five ratings into one score
+
+From [server/models/dread.js](server/models/dread.js):
+
+```js
+export function calculateDREAD(ratings) {
+  const factors = ["damage", "reproducibility", "exploitability",
+                   "affectedUsers", "discoverability"];
+  let total = 0;
+  factors.forEach((factor) => {
+    // Clamp each rating to a safe 0-10 integer (never trust raw input)
+    const rating = Math.min(10, Math.max(0, Math.round(Number(ratings[factor]) || 0)));
+    total += rating;
+  });
+
+  const averageScore = total / 5;        // average the 5 factors → 0-10
+  return {
+    total: Math.round(averageScore * 10) / 10,
+    riskLevel: getRiskLevel(averageScore),
+    recommendation: getRecommendation(averageScore),
+  };
+}
+```
+
+**What it does:** averages the five factors into a single 0-10 number and clamps each input
+to a valid range so malformed/hostile input can't skew the score. One number makes threats
+directly comparable and sortable.
+
+#### Key code 2 — score → risk level → action
+
+The raw number is meaningless without a decision. `getRiskLevel` maps the score to a level
+*and a recommended action and timeline*:
+
+```js
+function getRiskLevel(score) {
+  if (score >= 8) return { level: "CRITICAL", action: "Immediate remediation required" };
+  if (score >= 6) return { level: "HIGH",     action: "Remediate before next release" };
+  if (score >= 4) return { level: "MEDIUM",   action: "Schedule for remediation" };
+  if (score >= 2) return { level: "LOW",      action: "Address when convenient" };
+  return { level: "INFORMATIONAL", action: "No action required" };
+}
+```
 
 | Score Range | Risk Level | Action |
 |-------------|------------|--------|
@@ -113,20 +251,46 @@ DREAD provides a quantitative risk score (0-10):
 | 2-4 | LOW | Fix when convenient |
 | 0-2 | INFO | Accept or note |
 
-**Interactive Calculator:**
+**What it does:** converts a score into a *decision* — every threat gets an owner-ready
+verdict and timeline, which is the whole point of scoring.
+
+#### Key code 3 — prioritizing many threats
+
+`prioritizeThreats` scores a list and sorts highest-risk first, so remediation order falls
+straight out of the data:
+
+```js
+export function prioritizeThreats(threats) {
+  return threats
+    .map(threat => ({ ...threat, dreadScore: calculateDREAD(threat.ratings) }))
+    .sort((a, b) => b.dreadScore.total - a.dreadScore.total);   // worst first
+}
+```
+
+**Run it:**
 ```bash
 curl -X POST http://localhost:3001/api/demo/interactive/dread \
   -H "Content-Type: application/json" \
   -d '{
     "threatName": "NoSQL Injection",
     "ratings": {
-      "damage": 4,
-      "reproducibility": 3,
-      "exploitability": 2,
-      "affectedUsers": 4,
-      "discoverability": 3
+      "damage": 4, "reproducibility": 3, "exploitability": 2,
+      "affectedUsers": 4, "discoverability": 3
     }
-  }' | jq .
+  }' | jq '{threat: .threatName, score: .score.total,
+            riskLevel: .score.riskLevel.level, action: .score.riskLevel.action}'
+```
+
+---
+
+### Putting it together: the full workflow demo
+
+[scripts/demo.sh](scripts/demo.sh) runs all three frameworks end to end — STRIDE finds the
+threats, DREAD scores them, PASTA frames the risk, and the output is a prioritized
+remediation plan:
+
+```bash
+bash scripts/demo.sh
 ```
 
 ## 🔐 Security Features Demonstrated

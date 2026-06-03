@@ -1,6 +1,4 @@
-# MongoDB Security Demo Sequence (Cohesive Repo)
-
-This repo gives you a progressive, hands-on sequence that demonstrates:
+# MongoDB Security Demo Sequence
 
 1) Insecure MongoDB (no auth) + vulnerable login endpoint (NoSQL injection)
 2) Secure MongoDB (auth + RBAC) + app input validation to block operator injection
@@ -10,22 +8,6 @@ This repo gives you a progressive, hands-on sequence that demonstrates:
 6) Scripted seed + scripted attacker step
 
 ---
-
-## What this demo shows and demonstrates
-
-This is a **teaching lab**. Instead of explaining MongoDB security in the abstract, it lets
-you *run an attack, watch it succeed, then apply real controls and watch the same attack
-fail*. Each stage builds on the previous one, so by the end you have walked the full path
-from a wide-open database to a defense-in-depth deployment.
-
-### The story it tells
-
-> "Here is a working app. Here is how an attacker breaks in. Here is each layer of defense
-> that shuts the attack down — authentication, authorization, input validation, encryption
-> at rest, and encryption in transit."
-
-You start by **proving the vulnerability is real** (Demo 1), then add controls one layer at
-a time so you can see exactly what each control buys you and what it does *not* cover.
 
 ### Security concepts demonstrated
 
@@ -193,6 +175,69 @@ Run the attacker script again (expected: injection blocked, HTTP 400):
 bash scripts/attacker.sh
 ```
 
+### The code that fixes the vulnerability
+
+The fix is **defense in depth** — two independent layers, either of which would stop the attack.
+
+#### Layer 1 — Database: least-privilege RBAC user
+
+From [mongo/init/01-rbac.js](mongo/init/01-rbac.js), run once when `mongo-secure` first starts:
+
+```js
+db = db.getSiblingDB("appdb");
+
+db.createUser({
+  user: "app_user",
+  pwd: "ChangeMe_AppUser_LongRandom",
+  roles: [
+    { role: "readWrite", db: "appdb" }   // ONLY appdb — no admin, no other databases
+  ]
+});
+```
+
+**What it does:** the app no longer connects as an all-powerful root user. It connects as
+`app_user`, scoped to `readWrite` on `appdb` only. Combined with MongoDB's `--auth` flag
+(set in [docker-compose.yml](docker-compose.yml)), anonymous access is rejected and a
+compromised app can't read admin users, drop other databases, or escalate privileges.
+
+#### Layer 2 — Application: reject operator injection
+
+From [app/src/server.js](app/src/server.js), the same `/login` handler now validates input
+before querying when `VALIDATION_MODE=on`:
+
+```js
+// Recursively reject any object whose keys are MongoDB operators or dotted paths
+function containsMongoOperators(value) {
+  if (!value || typeof value !== "object") return false;
+  for (const key of Object.keys(value)) {
+    if (key.startsWith("$") || key.includes(".")) return true;  // blocks $ne, $gt, a.b ...
+    if (containsMongoOperators(value[key])) return true;        // recurse into nested objects
+  }
+  return false;
+}
+
+app.post("/login", async (req, res) => {
+  if (VALIDATION_MODE === "on") {
+    if (containsMongoOperators(req.body)) {
+      return res.status(400).json({ error: "Invalid input" });   // ← attack stops here
+    }
+    const { username, password } = req.body ?? {};
+    // Enforce that the values are strings, not query objects
+    if (typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ error: "Invalid input" });
+    }
+    const user = await users.findOne({ username, password });
+    return res.json({ ok: Boolean(user) });
+  }
+  // ...vulnerable path used in Demo 1
+});
+```
+
+**What it does:** the `{"$ne": null}` payload from Demo 1 now hits `containsMongoOperators`,
+which finds a `$`-prefixed key and returns **HTTP 400** before MongoDB is ever touched. The
+type check additionally guarantees `username`/`password` are plain strings, so an attacker
+can no longer smuggle a query operator in place of a value.
+
 Optional: prove RBAC
 
 ```bash
@@ -232,6 +277,57 @@ bash scripts/demo-encryption.sh
 2. **View raw MongoDB data** — See the encrypted blobs stored in the database
 3. **View decrypted data** — Application decrypts fields using the encryption key
 4. **Password hashing** — Passwords are hashed (one-way), not encrypted
+
+### The code that powers this demo
+
+#### Encrypting with AES-256-GCM
+
+From [app/src/encryption.js](app/src/encryption.js) — authenticated encryption that packs
+everything needed to decrypt into one base64 blob:
+
+```js
+export function encryptField(plaintext, key) {
+  const iv = crypto.randomBytes(IV_LENGTH);                    // fresh random IV per value
+  const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  let encrypted = cipher.update(plaintext, "utf8", "hex");
+  encrypted += cipher.final("hex");
+  const authTag = cipher.getAuthTag();                         // detects tampering
+
+  // Pack IV + AuthTag + Ciphertext so decrypt() has everything it needs
+  return Buffer.concat([iv, authTag, Buffer.from(encrypted, "hex")]).toString("base64");
+}
+```
+
+**What it does:** uses AES-256-**GCM** (authenticated encryption), so each value gets a
+unique random IV and an auth tag. If the stored ciphertext is altered, decryption fails
+instead of returning garbage. The IV and tag are stored alongside the ciphertext, not the key.
+
+#### Encrypt vs. hash — two different goals
+
+From [app/src/server-encrypted.js](app/src/server-encrypted.js), the create-user handler
+treats passwords and PII differently on purpose:
+
+```js
+const SENSITIVE_FIELDS = ["ssn", "creditCard", "email"];
+
+// Passwords are HASHED — one-way, you never need them back
+const hashedPassword = hashPassword(password);
+
+const userDoc = { username, password: hashedPassword, email, ssn, creditCard, createdAt: new Date() };
+
+// PII is ENCRYPTED — reversible, because you need to display it later
+const encryptedDoc = encryptDocument(userDoc, SENSITIVE_FIELDS, encryptionKey);
+await users.insertOne(encryptedDoc);
+```
+
+**What it does:** passwords are **hashed** (scrypt, one-way) because you only ever need to
+*verify* them, never read them back. SSN/credit-card/email are **encrypted** (reversible)
+because the app legitimately needs to show them again. The `/users/raw/:username` endpoint
+lets you see the ciphertext as actually stored, and `/users/encrypted/:username` decrypts on
+read with `decryptDocument(...)`.
+
+> **Limitation vs. Demo 4:** because encryption happens *manually* in the app, it's easy to
+> forget a field, and you **cannot query** on the encrypted values. Demo 4 (CSFLE) fixes both.
 
 **Manual testing:**
 
@@ -291,6 +387,66 @@ docker compose --profile csfle up -d
 ```bash
 bash scripts/demo-csfle.sh
 ```
+
+### The code that powers this demo
+
+#### A schema tells MongoDB what to encrypt — and how
+
+From [app/src/csfle.js](app/src/csfle.js), instead of encrypting in app code you declare a
+schema and the **driver** enforces it on every read and write:
+
+```js
+export function createEncryptionSchema(dataKeyId) {
+  return {
+    bsonType: "object",
+    encryptMetadata: { keyId: [dataKeyId] },
+    properties: {
+      ssn: {
+        encrypt: {
+          bsonType: "string",
+          // Deterministic: same input → same ciphertext, so equality queries work
+          algorithm: "AEAD_AES_256_CBC_HMAC_SHA_512-Deterministic"
+        }
+      },
+      creditCard: {
+        encrypt: {
+          bsonType: "string",
+          // Random: same input → different ciphertext, more secure, NOT queryable
+          algorithm: "AEAD_AES_256_CBC_HMAC_SHA_512-Random"
+        }
+      },
+      email: { encrypt: { bsonType: "string", algorithm: "...Deterministic" } }
+    }
+  };
+}
+```
+
+**What it does:** the schema is the single source of truth for which fields are sensitive.
+`ssn`/`email` use **Deterministic** encryption (queryable by equality); `creditCard` uses
+**Random** (stronger, but you can't query it). You physically *cannot* forget to encrypt a
+listed field — the driver refuses to store it in plaintext.
+
+#### Insert and query like normal — the driver does the crypto
+
+From [app/src/server-csfle.js](app/src/server-csfle.js):
+
+```js
+const { encryptedClient } = await initCSFLE();
+const users = encryptedClient.db(DB_NAME).collection("users");
+
+// Just insert normally — CSFLE auto-encrypts ssn/creditCard/email per the schema
+await users.insertOne({ username, password, email, ssn, creditCard, createdAt: new Date() });
+
+// Query an ENCRYPTED field directly — works because ssn is Deterministic.
+// The driver encrypts the query value and compares ciphertext-to-ciphertext.
+const user = await users.findOne({ ssn: req.params.ssn });
+```
+
+**What it does:** application code looks like ordinary MongoDB. The encrypted client
+transparently encrypts on write and decrypts on read. The `findOne({ ssn })` call shows the
+killer feature of Deterministic encryption — you can search on an encrypted column without
+ever exposing plaintext to the database. (A separate raw client in `/users/csfle/raw/...`
+proves the stored values really are encrypted `Binary` blobs.)
 
 ### Manual testing:
 
@@ -359,6 +515,41 @@ This creates:
 ```bash
 docker compose --profile tls up -d
 ```
+
+### The code that powers this demo
+
+#### Forcing TLS on the MongoDB server
+
+From the `mongo-tls` service in [docker-compose.yml](docker-compose.yml):
+
+```yaml
+command:
+  - mongod
+  - --auth
+  - --bind_ip_all
+  - --tlsMode=requireTLS                          # reject ANY non-TLS connection
+  - --tlsCertificateKeyFile=/certs/server.pem     # the server's identity
+  - --tlsCAFile=/certs/ca.pem                      # CA used to validate certs
+  - --tlsAllowConnectionsWithoutCertificates       # server cert required, client cert optional
+```
+
+**What it does:** `--tlsMode=requireTLS` makes the database refuse plaintext connections
+outright — that's why Step 4 below fails without `--tls`. The server presents `server.pem`
+so clients can verify they're talking to the real database (anti-MITM).
+
+#### Telling the app to connect over TLS
+
+The `app-tls` service connects with TLS parameters baked into the connection string:
+
+```yaml
+MONGO_URL: "mongodb://app_user:...@mongo-tls:27017/appdb?authSource=appdb&tls=true&tlsCAFile=/certs/ca.pem&tlsAllowInvalidHostnames=true"
+NODE_EXTRA_CA_CERTS: "/certs/ca.pem"             # trust our self-signed CA
+```
+
+**What it does:** `tls=true` plus `tlsCAFile` make the driver open an encrypted channel and
+validate the server certificate against our CA. Credentials, queries, and results are now
+encrypted in transit. (`tlsAllowInvalidHostnames` is a demo convenience for self-signed
+certs — drop it in production.)
 
 ### Step 3: Connect with TLS
 
