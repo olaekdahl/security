@@ -1,0 +1,57 @@
+---
+title: DFD (Level 1) - Web App + API on AWS (React + Node)
+---
+%% Notes:
+%% - This is a practical DFD-style view in Mermaid.
+%% - Trust boundaries are shown as subgraphs.
+%% - Data stores are shown with a cylinder shape ([(...)]).
+%% - External entities (actors) and processes are shown as nodes.
+flowchart TB
+  subgraph TB_INTERNET["Trust Boundary: Internet"]
+    USER["User Browser<br/>(React SPA)"]
+    ADMIN["Admin Browser<br/>(React SPA)"]
+    IDP["Third-Party IdP<br/>(OIDC)"]
+    EMAIL["Email Provider<br/>(SES/SendGrid)"]
+  end
+
+  subgraph TB_AWS["Trust Boundary: AWS Account / VPC"]
+    CLOUDFRONT["CloudFront<br/>(optional)"]
+    WAF["WAF<br/>(optional)"]
+    EDGE["API Gateway / ALB"]
+    API["Node API<br/>(Express)"]
+    WORKER["Worker<br/>(Queue consumer)"]
+
+    DB[("RDS/Postgres<br/>(or DynamoDB)")]
+    S3[("S3 Bucket<br/>(uploads)")]
+    CACHE[("Redis/Cache<br/>(optional)")]
+    SECRETS[("Secrets Manager<br/>(or SSM)")]
+    LOGS["CloudWatch Logs<br/>+ Metrics"]
+    CLOUDTRAIL["CloudTrail"]
+    QUEUE["Queue<br/>(SQS)"]
+  end
+
+  %% Data flows
+  USER -->|"HTTPS GET / (SPA assets)"| CLOUDFRONT
+  ADMIN -->|"HTTPS GET /admin (SPA assets)"| CLOUDFRONT
+  CLOUDFRONT -->|"Forward request"| WAF
+  WAF -->|"Allow/Block"| EDGE
+
+  USER -->|"HTTPS API calls<br/>(GET /api/*, POST /api/*)"| EDGE
+  ADMIN -->|"HTTPS Admin API calls<br/>(/api/admin/*)"| EDGE
+
+  EDGE -->|"HTTPS (internal)<br/>Forwarded requests"| API
+
+  API -->|"OIDC code/token exchange<br/>(Authorization Code + PKCE)"| IDP
+  API -->|"Read signing keys,<br/>DB creds"| SECRETS
+  API -->|"Read/Write data"| DB
+  API -->|"Put/Get objects"| S3
+  API -->|"Read/Write cache"| CACHE
+  API -->|"Enqueue async jobs"| QUEUE
+  WORKER -->|"Consume jobs"| QUEUE
+  WORKER -->|"Generate thumbnails<br/>or process files"| S3
+  WORKER -->|"Update job status"| DB
+
+  API -->|"Send notifications"| EMAIL
+  API -->|"App logs, metrics"| LOGS
+  EDGE -->|"Access logs"| LOGS
+  CLOUDTRAIL -->|"Audit logs"| LOGS

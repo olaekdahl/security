@@ -15,7 +15,7 @@ Reference: OWASP testing activities should occur before development, during defi
 - Roles (user/admin/service):
 
 ## 2) Mapping to Threat Model
-- Link to DFD: dfd-level1.puml
+- Link to DFD: dfd-level1.mmd
 - Link to STRIDE table: stride-table.md
 - Link to risk register: risk-register.csv
 - Highest-risk items (DREAD avg >= 7.0): list ThreatIDs

@@ -9,6 +9,70 @@ This repo gives you a progressive, hands-on sequence that demonstrates:
 5) **TLS/SSL encryption** for data in transit
 6) Scripted seed + scripted attacker step
 
+---
+
+## What this demo shows and demonstrates
+
+This is a **teaching lab**. Instead of explaining MongoDB security in the abstract, it lets
+you *run an attack, watch it succeed, then apply real controls and watch the same attack
+fail*. Each stage builds on the previous one, so by the end you have walked the full path
+from a wide-open database to a defense-in-depth deployment.
+
+### The story it tells
+
+> "Here is a working app. Here is how an attacker breaks in. Here is each layer of defense
+> that shuts the attack down — authentication, authorization, input validation, encryption
+> at rest, and encryption in transit."
+
+You start by **proving the vulnerability is real** (Demo 1), then add controls one layer at
+a time so you can see exactly what each control buys you and what it does *not* cover.
+
+### Security concepts demonstrated
+
+| Concept | Where | What you actually see |
+|---------|-------|-----------------------|
+| **NoSQL injection** | Demo 1 | A crafted JSON payload (`{"$ne": null}`) bypasses login entirely |
+| **Authentication** | Demo 2 | MongoDB started with `--auth`; anonymous access is rejected |
+| **Authorization (RBAC)** | Demo 2 | A least-privilege `app_user` that cannot touch admin or other databases |
+| **Input validation** | Demo 2 | The app rejects MongoDB operators and dotted paths, enforces types |
+| **Defense in depth** | Demo 2 | The same attack is blocked at *two* independent layers (DB + app) |
+| **Encryption at rest** | Demo 3 | Sensitive fields stored as AES-256-GCM ciphertext blobs |
+| **Password hashing vs. encryption** | Demo 3 | Passwords are one-way hashed (scrypt), not reversibly encrypted |
+| **Native CSFLE** | Demo 4 | The MongoDB driver auto-encrypts/decrypts fields from a JSON schema |
+| **Queryable encryption** | Demo 4 | Equality queries against deterministically-encrypted fields |
+| **Key management** | Demo 3 & 4 | Where keys live, and why a real KMS belongs in production |
+| **Encryption in transit (TLS)** | Demo 5 | MongoDB requires TLS; non-TLS connections are refused |
+
+### Threats it addresses (and the control that stops each one)
+
+- **Authentication bypass via injection** → input validation + least-privilege RBAC
+- **Unauthorized database access** → `--auth` + scoped `app_user` role
+- **Data theft from a breached database** → field-level encryption at rest (Demo 3/4)
+- **Lateral movement / privilege escalation** → RBAC limits a compromised app to `appdb` only
+- **Network eavesdropping / MITM** → TLS encryption in transit (Demo 5)
+- **Credential exposure in a dump** → password hashing, not plaintext storage
+
+### What you can do after running it
+
+- Explain *why* a JSON query API is exploitable and how operator injection works
+- Configure MongoDB authentication and least-privilege RBAC users
+- Validate and sanitize untrusted input to block operator/path injection
+- Choose between manual field encryption and MongoDB-native CSFLE — and explain the trade-offs
+- Stand up MongoDB with TLS and prove that plaintext connections are rejected
+- Articulate the difference between encryption *at rest* and encryption *in transit*, and
+  why production needs a real Key Management Service (AWS KMS, Azure Key Vault, GCP KMS, Vault)
+
+### What it intentionally does NOT do (demo simplifications)
+
+These shortcuts keep the lab easy to run but are **not** production-safe:
+
+- Encryption keys and the CSFLE master key live in env vars / code (use a KMS in production)
+- Passwords and secrets in `docker-compose.yml` are hardcoded demo values
+- TLS uses self-signed certs and allows invalid hostnames for convenience
+- No rate limiting, logging/auditing, or secrets manager integration
+
+---
+
 ## Repo layout
 
 - `docker-compose.yml` : brings up MongoDB + the demo app in **insecure**, **secure**, **encrypted**, **csfle**, or **tls** mode
@@ -49,6 +113,51 @@ Run the attacker script (expected: injection works, `ok=true`):
 ```bash
 bash scripts/attacker.sh
 ```
+
+### What the attacker script is actually doing
+
+The interesting line in [scripts/attacker.sh](scripts/attacker.sh) is the injection request:
+
+```bash
+HTTP_CODE=$(curl -sS -o /tmp/attack_body.json -w "%{http_code}" "${BASE_URL}/login" \
+  -H "content-type: application/json" \
+  -d '{"username":{"$ne":null},"password":{"$ne":null}}')
+```
+
+Breaking it down:
+
+- `curl -sS` — make an HTTP request, silent but still show errors.
+- `-o /tmp/attack_body.json` — write the **response body** to a temp file so the script can print it afterwards.
+- `-w "%{http_code}"` — after the request, print just the **HTTP status code** (e.g. `200` or `400`). That value is captured into the `HTTP_CODE` variable so the script can report success/failure separately from the body.
+- `"${BASE_URL}/login"` — POST to the app's login endpoint.
+- `-H "content-type: application/json"` — tell the server the body is JSON.
+- `-d '{...}'` — the malicious **payload**.
+
+**The payload is the attack.** A normal login sends string values:
+
+```json
+{ "username": "alice", "password": "password123" }
+```
+
+The app turns that into a MongoDB query `users.findOne({ username: "alice", password: "password123" })` — find a user whose fields *equal* those exact strings.
+
+The attacker instead sends **objects** where strings are expected:
+
+```json
+{ "username": {"$ne": null}, "password": {"$ne": null} }
+```
+
+`$ne` is the MongoDB **"not equal" operator**. Because the vulnerable app passes the JSON straight into the query, MongoDB now runs:
+
+```js
+users.findOne({ username: { $ne: null }, password: { $ne: null } })
+```
+
+which means *"find any user whose username is not null AND password is not null"* — i.e. **the first user in the collection**. `findOne` returns a match, the app sees a user, and replies `{"ok": true}`. **Login is bypassed without knowing any username or password.**
+
+This works because the app trusts client-supplied JSON *shape*. The attacker controls not just the values but the **structure** of the query — turning a value into a query operator. This is the NoSQL equivalent of classic SQL injection's `' OR '1'='1`.
+
+> Run the same script in Demo 2 and the response becomes **HTTP 400** — the app now rejects any payload containing `$`-prefixed keys before it ever reaches the database.
 
 View logs:
 

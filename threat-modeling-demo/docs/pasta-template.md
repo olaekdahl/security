@@ -67,7 +67,7 @@ For each top threat, write 1–3 scenarios.
 ---
 
 ## Deliverables Checklist
-- DFD in PlantUML (dfd-level1.puml)
+- DFD in Mermaid (dfd-level1.mmd)
 - STRIDE threat table (stride-table.md)
 - Risk register with DREAD scoring (risk-register.csv)
 - OWASP test plan (owasp-test-plan.md)
