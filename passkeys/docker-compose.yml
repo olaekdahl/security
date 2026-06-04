@@ -1,0 +1,30 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: passkeys-api
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - RP_ID=localhost
+      - RP_NAME=Passkeys Demo
+      - ORIGIN=http://localhost:8000
+    volumes:
+      - ./server:/app/server
+    command: node server/index.js
+
+  client:
+    build:
+      context: .
+      dockerfile: Dockerfile.client
+    container_name: passkeys-client
+    ports:
+      - "8000:3000"
+    environment:
+      - VITE_API_URL=http://localhost:8001
+    volumes:
+      - ./client/src:/app/src
+      - ./client/public:/app/public
+    stdin_open: true
